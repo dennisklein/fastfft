@@ -112,6 +112,47 @@ $N$ & fastfft, libstdc++ & fastfft, libc++ & SimdFFT, libstdc++ & SimdFFT, libc+
                       f"{cell(NATIVE, 'gr4-SimdFFT', 'float', n)} & {cell('libcxx', 'gr4-SimdFFT', 'float', n)}\\\\")
     tables.append("\\bottomrule\\end{tabular}\\end{table}\n")
 
+num_tr = {}
+if any(r["label"] == "gcc17" for r in summ):
+    def med(l, i, p, n):
+        r = T.get((l, i, p, n))
+        return float(r["median_ns"]) if r else None
+
+    for prec in ("float", "double"):
+        tables.append(f"""\\begin{{table}}[h]\\centering
+\\caption{{GCC trunk (17.0) with \\texttt{{-std=c++26}}, complex {prec}: median ns per transform [95\\,\\% CI].
+fastfft on \\texttt{{<experimental/simd>}} (GCC 14 and trunk), on C++26 \\texttt{{std::simd}}, and fastfft::cx on
+\\texttt{{std::simd::vec<std::complex<{prec}>{{}}>}} (plain, and with zip/broadcast via \\texttt{{bit\\_cast}} to a real
+vector); SimdFFT built with trunk for reference.}}\\label{{tab:gcc17-{prec}}}
+\\begin{{tabular}}{{rllllll}}\\toprule
+$N$ & exp., GCC 14 & exp., trunk & C++26 & cx & cx, bit\\_cast & SimdFFT\\\\\\midrule""")
+        for n in NS:
+            tables.append(f"$2^{{{n.bit_length() - 1}}}$ & {cell(NATIVE, 'fastfft', prec, n)} & {cell('gcc17-exp', 'fastfft', prec, n)} & "
+                          f"{cell('gcc17', 'fastfft', prec, n)} & {cell('gcc17', 'fastfft-cx', prec, n)} & "
+                          f"{cell('gcc17-cxbc', 'fastfft-cx', prec, n)} & {cell('gcc17', 'gr4-SimdFFT', prec, n)}\\\\")
+        tables.append("\\bottomrule\\end{tabular}\\end{table}\n")
+
+    def ratios(num_, den_, prec, lo=0, hi=1 << 30):
+        v = [med(*num_, prec, n) / med(*den_, prec, n) for n in NS if lo <= n <= hi and med(*num_, prec, n) and med(*den_, prec, n)]
+        return v
+
+    def rr(v, digits=2):
+        return f"{min(v):.{digits}f}--{max(v):.{digits}f}"
+
+    for prec, P in (("float", "Float"), ("double", "Double")):
+        # >1 means slower than the reference in the second argument
+        num_tr[f"{P}CxxSmall"] = rr(ratios(("gcc17", "fastfft"), ("gcc17-exp", "fastfft"), prec, hi=512))
+        num_tr[f"{P}CxxLarge"] = rr(ratios(("gcc17", "fastfft"), ("gcc17-exp", "fastfft"), prec, lo=1024))
+        num_tr[f"{P}CxSmall"] = rr(ratios(("gcc17", "fastfft-cx"), ("gcc17", "fastfft"), prec, hi=1 << 15))
+        num_tr[f"{P}CxLarge"] = rr(ratios(("gcc17", "fastfft-cx"), ("gcc17", "fastfft"), prec, lo=1 << 16))
+        num_tr[f"{P}CxbcSmall"] = rr(ratios(("gcc17-cxbc", "fastfft-cx"), ("gcc17-cxbc", "fastfft"), prec, hi=1 << 15))
+        num_tr[f"{P}CxbcLarge"] = rr(ratios(("gcc17-cxbc", "fastfft-cx"), ("gcc17-cxbc", "fastfft"), prec, lo=1 << 16))
+        num_tr[f"{P}TrunkVsGr"] = rr(ratios(("gcc17", "gr4-SimdFFT"), ("gcc17", "fastfft"), prec), 1)
+    num_tr["CxErr"] = sci(max(float(r["rel_err"]) for r in csv.DictReader(open(os.path.join(res, "check-gcc17_accuracy.csv"))) if r["impl"] == "fastfft-cx" and r["precision"] == "float"))
+    num_tr["CxErrD"] = sci(max(float(r["rel_err"]) for r in csv.DictReader(open(os.path.join(res, "check-gcc17_accuracy.csv"))) if r["impl"] == "fastfft-cx" and r["precision"] == "double"))
+    num_tr["TrunkVersion"] = re.search(r"gcc trunk: (.*)", host).group(1).split("(experimental)")[0].replace("g++ (GCC) ", "").strip() if "gcc trunk:" in host else "?"
+    num_tr["TrunkCommit"] = (re.search(r"gcc trunk: .*\) (\w+)", host) or re.search(r"(x)", "x")).group(1)[:10]
+
 tables.append(f"""\\begin{{table}}[h]\\centering
 \\caption{{Accuracy: largest $\\max_k|X_k-\\hat X_k|/\\max_k|\\hat X_k|$ over all $N$, against a long-double reference.}}\\label{{tab:acc}}
 \\begin{{tabular}}{{lccc}}\\toprule & fastfft & SimdFFT & FFTW\\\\\\midrule
@@ -120,7 +161,7 @@ double & {sci(maxerr('fastfft', 'double'))} & {sci(maxerr('gr4-SimdFFT', 'double
 \\bottomrule\\end{{tabular}}\\end{{table}}
 """)
 
-num = {}
+num = dict(num_tr)
 num["FloatVsGrRange"] = rng_(sp("gr4-SimdFFT", "float"))
 num["DoubleVsGrRange"] = rng_(sp("gr4-SimdFFT", "double"))
 num["FloatVsFftwRange"] = rng2(sp("fftw", "float"))

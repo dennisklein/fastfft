@@ -1,0 +1,26 @@
+-- FFTW: /home/claude/fft/build-vm/fftw/lib/libfftw3f.a /home/claude/fft/build-vm/fftw/lib/libfftw3.a
+-- Configuring done (0.6s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/claude/fft/build-vm
+[ 33%] Built target fftbench
+[ 66%] Built target fftbench_w32
+[100%] Built target fftbench_w16
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/claude/fft/build-vm-libcxx
+[100%] Built target fftbench
+-- FFTW: /home/claude/fft/build-vm/fftw/lib/libfftw3f.a /home/claude/fft/build-vm/fftw/lib/libfftw3.a
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/claude/fft/build-vm-gcc17
+[100%] Built target fftbench
+-- FFTW: /home/claude/fft/build-vm/fftw/lib/libfftw3f.a /home/claude/fft/build-vm/fftw/lib/libfftw3.a
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/claude/fft/build-vm-gcc17-exp
+[100%] Built target fftbench
+-- FFTW: /home/claude/fft/build-vm/fftw/lib/libfftw3f.a /home/claude/fft/build-vm/fftw/lib/libfftw3.a
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/claude/fft/build-vm-gcc17-cxbc
+[100%] Built target fftbench

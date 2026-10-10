@@ -26,9 +26,7 @@ at four lanes. We present \code{fastfft}, a single-header radix-8/16 Stockham FF
 \code{native\_simd} without ISA intrinsics. On one AVX-512 core it is \FloatVsGrRange{} faster than \code{SimdFFT}
 for complex single-precision transforms of size $2^6$--$2^{20}$ and \DoubleVsGrRange{} in double precision, and
 between \FloatVsFftwRange{} (float) and \DoubleVsFftwRange{} (double) as fast as FFTW~3.3.10 with AVX-512 codelets.
-Inside GNU~Radio~4, a small patch makes the streaming FFT block \GrStreamFloat{} faster (float). Using the full vector
-width accounts for most of the gain. Writing the kernel against \code{std::simd} required three workarounds, which we
-describe. The code and a harness that repeats all measurements on any Linux host are public.
+Inside GNU~Radio~4, a small patch makes the streaming FFT block \GrStreamFloat{} faster (float). C++26 \code{std::simd} in GCC trunk removes the last compiler extension. The code and a harness that repeats all measurements on any Linux host are public.
 \end{abstract}
 
 \section{Introduction}
@@ -40,8 +38,7 @@ three quarters of each register unused in single precision.
 
 We asked how fast a power-of-two complex FFT can be when written only against \code{native\_simd}, so that the
 width follows the compilation target, and whether it can match a tuned library. The answer, \code{fastfft}, is one
-\SI{400}{line} header. This note describes its structure (\S\ref{sec:alg}), what \code{std::simd} could not express
-(\S\ref{sec:simd}), the measurement method (\S\ref{sec:method}) and the results (\S\ref{sec:results}).
+\SI{400}{line} header.
 
 \section{Algorithm}\label{sec:alg}
 \code{fastfft} is a Stockham autosort FFT~\cite{stockham,vanloan}: every pass reads one buffer and writes the other
@@ -74,8 +71,11 @@ same way.
 \code{-ffp-contract=fast} (GCC's default in GNU mode).
 \textbf{(iii) Backends.} vir-simd forwards to libstdc++'s implementation when it is available; with libc++ it
 falls back to emulating the vector types with arrays, silently (\S\ref{sec:results}). Our header defines
-\code{FASTFFT\_NATIVE\_SIMD} so that callers can detect this case. Finally, with \SI{128}{bit} registers a vector
-holds only one complex double; the header then uses a pair of registers (\code{simd<double,4>}).
+\code{FASTFFT\_NATIVE\_SIMD} so that callers can detect this case.
+\textbf{(iv) C++26.} GCC trunk (\TrunkVersion{}) ships C++26 \code{std::simd}~\cite{p1928}. There (i) has a standard
+spelling, \code{permute<W>(cat(a,b), f)}, which GCC lowers to the same \code{vpermt2ps}; with \code{-std=c++26} the
+header uses it and needs no compiler extension. It also offers \code{vec<complex<T>{}>}, which we tried as well
+(\S\ref{sec:results}).
 
 \section{Method}\label{sec:method}
 \code{fftbench} times \code{fastfft}, \code{SimdFFT} (gr4 rev.~\code{af62235}) and FFTW~3.3.10~\cite{fftw}
@@ -97,7 +97,7 @@ deviation over all cells was \WorstMAD{}.
 \begin{figure}[t]
 \centering
 \begin{tikzpicture}
-\begin{axis}[width=\columnwidth,height=52mm,xmode=log,log basis x=2,ymode=log,log basis y=2,
+\begin{axis}[width=\columnwidth,height=44mm,xmode=log,log basis x=2,ymode=log,log basis y=2,
   xlabel={transform size $N$},ylabel={speedup of \code{fastfft}},ytick={0.5,1,2,4},yticklabels={0.5,1,2,4},
   xtick={64,256,1024,4096,16384,65536,262144,1048576},
   xticklabels={$2^6$,$2^8$,$2^{10}$,$2^{12}$,$2^{14}$,$2^{16}$,$2^{18}$,$2^{20}$},
@@ -120,31 +120,45 @@ markers). Above 1 means \code{fastfft} is faster. Absolute times in Tables~\ref{
 \paragraph{Kernel.} Figure~\ref{fig:speedup} summarises the comparison. In single precision \code{fastfft} is
 2.5--3.4$\times$ faster than \code{SimdFFT} up to $2^{15}$ and 1.6--2.1$\times$ above, where both are increasingly
 bound by memory traffic. Against FFTW the picture depends on $N$ (\FloatVsFftwRange{}): \code{fastfft} is ahead at
-$2^6$--$2^7$, $2^9$--$2^{10}$, $2^{13}$--$2^{15}$ and $2^{19}$--$2^{20}$, within 5\,\% at $2^8$, $2^{11}$ and
-$2^{16}$, and behind at $2^{12}$ and $2^{17}$--$2^{18}$. In double precision the gain over \code{SimdFFT} is
+$2^6$--$2^{10}$, $2^{13}$--$2^{15}$ and $2^{19}$--$2^{20}$, within 5\,\% at $2^{16}$--$2^{17}$, and behind at
+$2^{11}$--$2^{12}$ and $2^{18}$. In double precision the gain over \code{SimdFFT} is
 \DoubleVsGrRange{}, smaller because four doubles already fill half an AVX-512 register; \code{fastfft} beats FFTW up
-to $2^9$ and at $2^{14}$ and $2^{19}$, and FFTW is faster at $2^{10}$--$2^{12}$, $2^{15}$--$2^{18}$ (down to
+to $2^9$ and at $2^{14}$ and $2^{19}$, is level at $2^{13}$, and FFTW is faster at $2^{10}$--$2^{12}$, $2^{15}$--$2^{18}$ (down to
 0.70$\times$) and $2^{20}$. Accuracy is unaffected: the largest error relative to
 $\max|X|$ was \FloatErr{} (float) and \DoubleErr{} (double), against \FloatErrGr{} and \DoubleErrGr{} for
-\code{SimdFFT} (Table~\ref{tab:acc}). The confidence intervals are narrow (most within $\pm$2\,\%), so these
-differences are not noise on this host.
+\code{SimdFFT} (Table~\ref{tab:acc}).
 
 \paragraph{Vector width.} Compiling \code{fastfft} for narrower vectors separates the effect of width from that of
 the algorithm (Table~\ref{tab:width}). With \SI{128}{bit} vectors, the width \code{SimdFFT} uses for floats,
 \code{fastfft} is \WidthSixteenVsGr{} as fast as \code{SimdFFT}: the larger radices help mainly for small $N$.
 Going from \SI{128}{bit} to \SI{512}{bit} vectors then adds another factor of \WidthGain{}.
 
+\paragraph{C++26 \texttt{std::simd}.} Built with GCC trunk, the extension-free C++26 path is \FloatCxxSmall{}$\times$
+slower than the same compiler's \code{<experimental/simd>} path for $N\le 2^9$ (double \DoubleCxxSmall{}$\times$) and
+mostly level above, apart from $2^{20}$ (Tables~\ref{tab:gcc17-float},~\ref{tab:gcc17-double}; separate processes,
+so not paired). Against \code{SimdFFT} built with the same compiler it remains \FloatTrunkVsGr{}$\times$ faster
+(double \DoubleTrunkVsGr{}$\times$).
+We also rewrote the kernel on \code{std::simd::vec<std::complex<T>{}>} (\code{fastfft::cx},
+\code{include/fastfft/fft\_cx.hpp}). Products and $\pm i$ rotations become plain complex arithmetic, and the twiddle
+tables halve. Three things in the current implementation got in the way:
+\code{permute} does not accept complex vectors, so the zips go through \code{real()}/\code{imag()} and back;
+broadcasting a complex scalar compiles to scalar stores, so we build it from two real broadcasts; and
+\code{operator*} carries the Annex~G NaN/Inf recovery unless compiled with \code{-fcx-limited-range}. Accuracy is
+unchanged (\CxErr{}). \code{fastfft::cx} is \FloatCxSmall{}$\times$ slower up to $2^{15}$ but takes \FloatCxLarge{}$\times$
+the time of the real-lane version from $2^{16}$ (double: \DoubleCxSmall{} and \DoubleCxLarge{}), where the smaller
+twiddle tables likely help. Replacing the zip and broadcast workarounds by a non-portable \code{bit\_cast} to a real
+vector reduces the small-size gap to \FloatCxbcSmall{}$\times$; the remainder is the generic complex product (three
+in-lane shuffles where our pre-arranged twiddles need one).
+
 \paragraph{Emulated \texttt{simd}.} Built with clang~20 and libc++, where vir-simd emulates the vector types,
 \code{fastfft} becomes \FallbackSlowdown{} slower and \code{SimdFFT} \FallbackSlowdownGr{} slower
-(Table~\ref{tab:libcxx}). Under emulation \code{fastfft} is \emph{slower} than \code{SimdFFT} for $N\ge 2^7$: its
-shuffles and broadcasts, which are single instructions with native types, become element loops. The patch below
-therefore enables \code{fastfft} only when \code{FASTFFT\_NATIVE\_SIMD} is set. gr4's default clang build uses libc++
-and so falls into this case for both kernels.
+(Table~\ref{tab:libcxx}). Under emulation \code{fastfft} is \emph{slower} than \code{SimdFFT} for $N\ge 2^7$, as its
+single-instruction shuffles become element loops, so the patch below enables it only with native types.
 
 \paragraph{In gr4.} The patch (\code{gr4/0001-fastfft.patch}) adds the header to gr4 and makes
 \code{gr::algorithm::FFT} use it for complex power-of-two sizes $\ge 64$; real-input and non-power-of-two
-transforms still use \code{SimdFFT}. In the spectrum block it also computes into the existing output buffer instead
-of a new vector per frame and fuses magnitude, phase and fftshift into one pass. gr4's FFT unit tests pass
+transforms still use \code{SimdFFT}. The spectrum block also reuses its output buffer and fuses magnitude, phase and
+fftshift into one pass. gr4's FFT unit tests pass
 unchanged (GCC~14.2). Measured with gr4's own benchmark facility (Table~\ref{tab:gr4}, 5 alternating runs per
 build), the streaming block \code{FFT<T>} gets \GrStreamFloat{} faster for floats and \GrStreamDouble{} for
 doubles. The spectrum block \code{FFT<T,DataSet<P>>} (\code{bm\_fft\_block}, $N=1024$) is unchanged within noise
@@ -155,25 +169,24 @@ have not analysed. For complex float input it spends about \SI{70}{\micro s} per
 \section{Discussion}
 Using the native vector width and fewer, larger radix passes is enough to make a portable FFT competitive with a
 hand-tuned library on the measured host; nothing in the kernel is specific to x86. FFTW's remaining lead at some
-sizes suggests that choosing radices per size, as FFTW's planner does, would help further. What \code{std::simd}
-lacks for this kernel is a two-input permute; with one (or with C++26 \code{std::simd} offering it), the kernel would
-be pure standard C++. The emulation result shows the other side of portability: code written for native vector types
+sizes suggests that choosing radices per size, as FFTW's planner does, would help further. With C++26
+\code{std::simd} the kernel is pure standard C++, at a cost of 5--25\,\% for small $N$ on today's trunk;
+\code{vec<complex<T>{}>} reads most naturally and is already faster for large $N$, and would be for all $N$ once
+\code{permute}, broadcast and the complex product are optimised for it. The emulation result shows the other side of portability: code written for native vector types
 can become slower than simpler code when the types are emulated, so a library should check which backend it got.
 
-These results come from one virtual AVX-512 core. AVX2-only x86, ARM with NEON or SVE, and other compilers may
-behave differently, and the harness was written so that collecting those data takes one command
-(\code{bench/run.sh}; \code{bench/gr4\_compare.sh} for the gr4 patch). For gr4's spectrum block, the next gains lie
-outside the FFT.
+These results come from one virtual AVX-512 core; other CPUs and compilers may differ, and collecting their data
+takes one command (\code{bench/run.sh}).
 
-\paragraph{Code.} \url{https://github.com/dennisklein/fft} (header, harness, gr4 patch, raw data).
-
-\paragraph{Contributions.} D.K.\ posed the question, steered the work and reviewed the results. Claude, an AI model
+\paragraph{Code and contributions.} \url{https://github.com/dennisklein/fastfft} (headers, harness, gr4 patch,
+raw data). D.K.\ posed the question, steered the work and reviewed the results. Claude, an AI model
 by Anthropic, wrote the code, ran the measurements and drafted the text.
 
 \begin{thebibliography}{9}\setlength\itemsep{0pt}\small
 \bibitem{gr4} GNU Radio 4.0, \url{https://github.com/fair-acc/gnuradio4}, rev.\ \code{af62235}.
 \bibitem{pffft} J.~Pommier, PFFFT: a pretty fast FFT, \url{https://bitbucket.org/jpommier/pffft}.
-\bibitem{ts} ISO/IEC TS 19570:2018, Parallelism TS v2 (\code{std::experimental::simd}); P1928, \code{std::simd} for C++26.
+\bibitem{ts} ISO/IEC TS 19570:2018, Parallelism TS v2 (\code{std::experimental::simd}).
+\bibitem{p1928} M.~Kretz et al., P1928: \code{std::simd} for C++26; implementation: GCC trunk \code{\TrunkCommit}.
 \bibitem{vir} M.~Kretz, vir-simd, \url{https://github.com/mattkretz/vir-simd}, v0.4.4.
 \bibitem{fftw} M.~Frigo, S.~G.~Johnson, The design and implementation of FFTW3, Proc.\ IEEE 93(2):216--231, 2005.
 \bibitem{stockham} T.~G.~Stockham, High-speed convolution and correlation, AFIPS SJCC, 1966.

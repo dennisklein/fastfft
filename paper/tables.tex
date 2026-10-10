@@ -2,42 +2,42 @@
 \caption{Complex float: median ns per transform [95\,\% CI] and speedup of fastfft (median of paired ratios [95\,\% CI]).}\label{tab:float}
 \begin{tabular}{rlllll}\toprule
 $N$ & fastfft & gr4 SimdFFT & FFTW 3.3.10 & vs.\ SimdFFT & vs.\ FFTW\\\midrule
-$2^{6}$ & 35.0 {\scriptsize[34.7, 35.2]} & 114 {\scriptsize[112, 116]} & 44.1 {\scriptsize[43.5, 44.6]} & 3.27 {\scriptsize[3.23, 3.30]} & 1.26 {\scriptsize[1.25, 1.27]}\\
-$2^{7}$ & 69.0 {\scriptsize[68.5, 69.7]} & 237 {\scriptsize[235, 238]} & 76.7 {\scriptsize[76.3, 77.1]} & 3.42 {\scriptsize[3.40, 3.44]} & 1.11 {\scriptsize[1.10, 1.12]}\\
-$2^{8}$ & 162 {\scriptsize[161, 164]} & 468 {\scriptsize[464, 471]} & 162 {\scriptsize[160, 163]} & 2.89 {\scriptsize[2.87, 2.92]} & 0.99 {\scriptsize[0.98, 1.00]}\\
-$2^{9}$ & 302 {\scriptsize[298, 305]} & 1018 {\scriptsize[1010, 1031]} & 356 {\scriptsize[353, 362]} & 3.39 {\scriptsize[3.36, 3.41]} & 1.16 {\scriptsize[1.16, 1.18]}\\
-$2^{10}$ & 655 {\scriptsize[649, 659]} & 2147 {\scriptsize[2134, 2159]} & 759 {\scriptsize[752, 764]} & 3.29 {\scriptsize[3.25, 3.32]} & 1.17 {\scriptsize[1.16, 1.17]}\\
-$2^{11}$ & 1793 {\scriptsize[1784, 1807]} & 4942 {\scriptsize[4917, 4959]} & 1696 {\scriptsize[1682, 1708]} & 2.76 {\scriptsize[2.75, 2.77]} & 0.95 {\scriptsize[0.94, 0.96]}\\
-$2^{12}$ & 4895 {\scriptsize[4866, 4922]} & 12.2\,k {\scriptsize[12.1\,k, 12.2\,k]} & 3854 {\scriptsize[3805, 3892]} & 2.50 {\scriptsize[2.48, 2.51]} & 0.79 {\scriptsize[0.78, 0.79]}\\
-$2^{13}$ & 10.1\,k {\scriptsize[9997, 10.2\,k]} & 29.3\,k {\scriptsize[29.2\,k, 29.4\,k]} & 12.6\,k {\scriptsize[12.5\,k, 12.7\,k]} & 2.91 {\scriptsize[2.89, 2.93]} & 1.25 {\scriptsize[1.24, 1.26]}\\
-$2^{14}$ & 20.5\,k {\scriptsize[20.3\,k, 20.6\,k]} & 59.1\,k {\scriptsize[58.8\,k, 59.5\,k]} & 28.1\,k {\scriptsize[27.9\,k, 28.2\,k]} & 2.90 {\scriptsize[2.88, 2.93]} & 1.36 {\scriptsize[1.34, 1.38]}\\
-$2^{15}$ & 45.6\,k {\scriptsize[45.2\,k, 46.2\,k]} & 134.7\,k {\scriptsize[134.2\,k, 135.7\,k]} & 62.0\,k {\scriptsize[61.5\,k, 62.6\,k]} & 2.96 {\scriptsize[2.94, 2.98]} & 1.36 {\scriptsize[1.34, 1.38]}\\
-$2^{16}$ & 140.9\,k {\scriptsize[140.4\,k, 141.7\,k]} & 271.7\,k {\scriptsize[269.7\,k, 273.6\,k]} & 139.1\,k {\scriptsize[138.4\,k, 139.9\,k]} & 1.93 {\scriptsize[1.89, 1.97]} & 0.98 {\scriptsize[0.97, 1.00]}\\
-$2^{17}$ & 418.3\,k {\scriptsize[410.7\,k, 423.7\,k]} & 726.4\,k {\scriptsize[719.1\,k, 739.8\,k]} & 370.4\,k {\scriptsize[365.2\,k, 375.2\,k]} & 1.77 {\scriptsize[1.74, 1.79]} & 0.90 {\scriptsize[0.88, 0.92]}\\
-$2^{18}$ & 1.008\,M {\scriptsize[1.001\,M, 1.015\,M]} & 1.808\,M {\scriptsize[1.792\,M, 1.832\,M]} & 881.0\,k {\scriptsize[873.5\,k, 890.8\,k]} & 1.80 {\scriptsize[1.78, 1.81]} & 0.88 {\scriptsize[0.87, 0.90]}\\
-$2^{19}$ & 2.068\,M {\scriptsize[2.059\,M, 2.082\,M]} & 4.355\,M {\scriptsize[4.319\,M, 4.402\,M]} & 4.238\,M {\scriptsize[4.187\,M, 4.304\,M]} & 2.11 {\scriptsize[2.09, 2.13]} & 2.04 {\scriptsize[2.01, 2.06]}\\
-$2^{20}$ & 5.524\,M {\scriptsize[5.439\,M, 5.616\,M]} & 9.040\,M {\scriptsize[8.948\,M, 9.148\,M]} & 8.338\,M {\scriptsize[8.246\,M, 8.428\,M]} & 1.64 {\scriptsize[1.63, 1.66]} & 1.53 {\scriptsize[1.51, 1.54]}\\
+$2^{6}$ & 35.8 {\scriptsize[34.8, 36.7]} & 117 {\scriptsize[116, 122]} & 45.6 {\scriptsize[44.9, 46.5]} & 3.32 {\scriptsize[3.28, 3.37]} & 1.27 {\scriptsize[1.25, 1.29]}\\
+$2^{7}$ & 69.8 {\scriptsize[69.5, 70.2]} & 236 {\scriptsize[235, 239]} & 79.6 {\scriptsize[78.8, 84.7]} & 3.39 {\scriptsize[3.38, 3.42]} & 1.14 {\scriptsize[1.13, 1.18]}\\
+$2^{8}$ & 163 {\scriptsize[161, 165]} & 471 {\scriptsize[469, 475]} & 180 {\scriptsize[172, 182]} & 2.92 {\scriptsize[2.89, 2.93]} & 1.08 {\scriptsize[1.05, 1.12]}\\
+$2^{9}$ & 315 {\scriptsize[311, 318]} & 1035 {\scriptsize[1028, 1051]} & 361 {\scriptsize[353, 365]} & 3.32 {\scriptsize[3.29, 3.36]} & 1.13 {\scriptsize[1.12, 1.15]}\\
+$2^{10}$ & 658 {\scriptsize[650, 663]} & 2123 {\scriptsize[2113, 2142]} & 769 {\scriptsize[755, 804]} & 3.27 {\scriptsize[3.25, 3.30]} & 1.17 {\scriptsize[1.16, 1.20]}\\
+$2^{11}$ & 1800 {\scriptsize[1789, 1813]} & 4967 {\scriptsize[4947, 4999]} & 1709 {\scriptsize[1689, 1723]} & 2.75 {\scriptsize[2.74, 2.76]} & 0.94 {\scriptsize[0.93, 0.95]}\\
+$2^{12}$ & 4926 {\scriptsize[4906, 4952]} & 12.5\,k {\scriptsize[12.3\,k, 12.9\,k]} & 4245 {\scriptsize[4222, 4284]} & 2.54 {\scriptsize[2.52, 2.58]} & 0.86 {\scriptsize[0.85, 0.87]}\\
+$2^{13}$ & 10.3\,k {\scriptsize[10.2\,k, 10.4\,k]} & 30.1\,k {\scriptsize[29.9\,k, 30.6\,k]} & 12.9\,k {\scriptsize[12.8\,k, 13.1\,k]} & 2.95 {\scriptsize[2.93, 2.97]} & 1.26 {\scriptsize[1.24, 1.28]}\\
+$2^{14}$ & 21.4\,k {\scriptsize[21.1\,k, 21.6\,k]} & 60.9\,k {\scriptsize[60.4\,k, 61.4\,k]} & 28.6\,k {\scriptsize[28.3\,k, 29.1\,k]} & 2.86 {\scriptsize[2.84, 2.89]} & 1.35 {\scriptsize[1.33, 1.37]}\\
+$2^{15}$ & 45.0\,k {\scriptsize[44.5\,k, 45.6\,k]} & 133.0\,k {\scriptsize[132.7\,k, 133.6\,k]} & 61.9\,k {\scriptsize[61.5\,k, 62.6\,k]} & 2.98 {\scriptsize[2.96, 3.00]} & 1.38 {\scriptsize[1.36, 1.39]}\\
+$2^{16}$ & 143.2\,k {\scriptsize[141.3\,k, 145.7\,k]} & 275.8\,k {\scriptsize[274.0\,k, 278.1\,k]} & 146.7\,k {\scriptsize[141.1\,k, 150.2\,k]} & 1.94 {\scriptsize[1.92, 1.96]} & 1.02 {\scriptsize[1.01, 1.04]}\\
+$2^{17}$ & 411.5\,k {\scriptsize[406.9\,k, 416.6\,k]} & 734.3\,k {\scriptsize[721.2\,k, 742.5\,k]} & 394.9\,k {\scriptsize[389.4\,k, 400.1\,k]} & 1.78 {\scriptsize[1.76, 1.80]} & 0.96 {\scriptsize[0.94, 0.98]}\\
+$2^{18}$ & 1.031\,M {\scriptsize[1.021\,M, 1.042\,M]} & 1.835\,M {\scriptsize[1.814\,M, 1.851\,M]} & 898.7\,k {\scriptsize[886.1\,k, 911.2\,k]} & 1.79 {\scriptsize[1.78, 1.81]} & 0.87 {\scriptsize[0.86, 0.89]}\\
+$2^{19}$ & 2.105\,M {\scriptsize[2.083\,M, 2.121\,M]} & 4.429\,M {\scriptsize[4.378\,M, 4.506\,M]} & 4.373\,M {\scriptsize[4.293\,M, 4.423\,M]} & 2.14 {\scriptsize[2.11, 2.15]} & 2.04 {\scriptsize[1.99, 2.09]}\\
+$2^{20}$ & 5.474\,M {\scriptsize[5.427\,M, 5.542\,M]} & 8.954\,M {\scriptsize[8.908\,M, 9.016\,M]} & 8.029\,M {\scriptsize[7.976\,M, 8.078\,M]} & 1.65 {\scriptsize[1.64, 1.66]} & 1.46 {\scriptsize[1.46, 1.49]}\\
 \bottomrule\end{tabular}\end{table}
 
 \begin{table}[h]\centering
 \caption{Complex double: median ns per transform [95\,\% CI] and speedup of fastfft (median of paired ratios [95\,\% CI]).}\label{tab:double}
 \begin{tabular}{rlllll}\toprule
 $N$ & fastfft & gr4 SimdFFT & FFTW 3.3.10 & vs.\ SimdFFT & vs.\ FFTW\\\midrule
-$2^{6}$ & 72.8 {\scriptsize[71.3, 75.2]} & 130 {\scriptsize[128, 132]} & 84.5 {\scriptsize[84.0, 84.9]} & 1.79 {\scriptsize[1.78, 1.80]} & 1.13 {\scriptsize[1.12, 1.17]}\\
-$2^{7}$ & 160 {\scriptsize[159, 162]} & 286 {\scriptsize[284, 288]} & 193 {\scriptsize[191, 195]} & 1.80 {\scriptsize[1.78, 1.82]} & 1.20 {\scriptsize[1.19, 1.21]}\\
-$2^{8}$ & 383 {\scriptsize[380, 386]} & 596 {\scriptsize[589, 604]} & 396 {\scriptsize[392, 400]} & 1.57 {\scriptsize[1.55, 1.57]} & 1.03 {\scriptsize[1.02, 1.03]}\\
-$2^{9}$ & 821 {\scriptsize[811, 829]} & 1367 {\scriptsize[1352, 1376]} & 866 {\scriptsize[854, 890]} & 1.67 {\scriptsize[1.65, 1.68]} & 1.05 {\scriptsize[1.04, 1.09]}\\
-$2^{10}$ & 2155 {\scriptsize[2146, 2166]} & 3218 {\scriptsize[3202, 3236]} & 1857 {\scriptsize[1824, 1944]} & 1.49 {\scriptsize[1.48, 1.51]} & 0.85 {\scriptsize[0.84, 0.88]}\\
-$2^{11}$ & 4952 {\scriptsize[4927, 4985]} & 10.1\,k {\scriptsize[10.0\,k, 10.2\,k]} & 4406 {\scriptsize[4314, 4482]} & 2.04 {\scriptsize[2.02, 2.05]} & 0.87 {\scriptsize[0.86, 0.89]}\\
-$2^{12}$ & 12.2\,k {\scriptsize[12.1\,k, 12.3\,k]} & 18.6\,k {\scriptsize[18.4\,k, 18.7\,k]} & 11.4\,k {\scriptsize[11.3\,k, 11.5\,k]} & 1.52 {\scriptsize[1.51, 1.53]} & 0.93 {\scriptsize[0.92, 0.95]}\\
-$2^{13}$ & 24.2\,k {\scriptsize[24.1\,k, 24.3\,k]} & 40.1\,k {\scriptsize[39.9\,k, 40.3\,k]} & 23.9\,k {\scriptsize[23.6\,k, 24.3\,k]} & 1.66 {\scriptsize[1.65, 1.67]} & 1.00 {\scriptsize[0.99, 1.00]}\\
-$2^{14}$ & 51.5\,k {\scriptsize[51.2\,k, 51.8\,k]} & 86.6\,k {\scriptsize[86.1\,k, 87.3\,k]} & 55.8\,k {\scriptsize[55.4\,k, 56.2\,k]} & 1.68 {\scriptsize[1.67, 1.69]} & 1.09 {\scriptsize[1.08, 1.10]}\\
-$2^{15}$ & 139.6\,k {\scriptsize[138.2\,k, 140.2\,k]} & 197.6\,k {\scriptsize[196.2\,k, 199.4\,k]} & 131.0\,k {\scriptsize[128.1\,k, 133.0\,k]} & 1.42 {\scriptsize[1.41, 1.44]} & 0.95 {\scriptsize[0.92, 0.97]}\\
-$2^{16}$ & 400.2\,k {\scriptsize[397.2\,k, 407.1\,k]} & 526.2\,k {\scriptsize[523.5\,k, 532.6\,k]} & 282.6\,k {\scriptsize[281.4\,k, 284.5\,k]} & 1.34 {\scriptsize[1.32, 1.35]} & 0.70 {\scriptsize[0.69, 0.71]}\\
-$2^{17}$ & 1.000\,M {\scriptsize[992.2\,k, 1.008\,M]} & 1.858\,M {\scriptsize[1.832\,M, 1.871\,M]} & 701.9\,k {\scriptsize[698.5\,k, 713.0\,k]} & 1.85 {\scriptsize[1.83, 1.86]} & 0.71 {\scriptsize[0.70, 0.71]}\\
-$2^{18}$ & 2.122\,M {\scriptsize[2.110\,M, 2.149\,M]} & 4.047\,M {\scriptsize[4.022\,M, 4.090\,M]} & 1.501\,M {\scriptsize[1.488\,M, 1.511\,M]} & 1.91 {\scriptsize[1.89, 1.93]} & 0.71 {\scriptsize[0.70, 0.71]}\\
-$2^{19}$ & 4.491\,M {\scriptsize[4.360\,M, 4.675\,M]} & 8.844\,M {\scriptsize[8.725\,M, 8.946\,M]} & 5.195\,M {\scriptsize[5.158\,M, 5.242\,M]} & 1.97 {\scriptsize[1.94, 2.02]} & 1.21 {\scriptsize[1.17, 1.22]}\\
-$2^{20}$ & 12.499\,M {\scriptsize[12.242\,M, 12.947\,M]} & 19.083\,M {\scriptsize[18.824\,M, 19.385\,M]} & 10.350\,M {\scriptsize[10.222\,M, 10.491\,M]} & 1.53 {\scriptsize[1.50, 1.56]} & 0.85 {\scriptsize[0.84, 0.87]}\\
+$2^{6}$ & 74.7 {\scriptsize[73.2, 76.2]} & 132 {\scriptsize[131, 135]} & 84.6 {\scriptsize[83.2, 85.4]} & 1.82 {\scriptsize[1.80, 1.83]} & 1.13 {\scriptsize[1.10, 1.15]}\\
+$2^{7}$ & 161 {\scriptsize[159, 164]} & 286 {\scriptsize[284, 288]} & 193 {\scriptsize[191, 194]} & 1.79 {\scriptsize[1.77, 1.80]} & 1.20 {\scriptsize[1.18, 1.22]}\\
+$2^{8}$ & 382 {\scriptsize[379, 385]} & 605 {\scriptsize[601, 610]} & 396 {\scriptsize[391, 401]} & 1.59 {\scriptsize[1.58, 1.61]} & 1.02 {\scriptsize[1.01, 1.04]}\\
+$2^{9}$ & 837 {\scriptsize[827, 851]} & 1389 {\scriptsize[1377, 1409]} & 884 {\scriptsize[873, 902]} & 1.67 {\scriptsize[1.66, 1.69]} & 1.04 {\scriptsize[1.03, 1.05]}\\
+$2^{10}$ & 2146 {\scriptsize[2130, 2163]} & 3165 {\scriptsize[3144, 3181]} & 1958 {\scriptsize[1939, 1975]} & 1.47 {\scriptsize[1.47, 1.48]} & 0.92 {\scriptsize[0.91, 0.92]}\\
+$2^{11}$ & 4992 {\scriptsize[4953, 5017]} & 9923 {\scriptsize[9854, 9970]} & 4389 {\scriptsize[4333, 4520]} & 1.99 {\scriptsize[1.98, 2.01]} & 0.88 {\scriptsize[0.86, 0.89]}\\
+$2^{12}$ & 11.8\,k {\scriptsize[11.7\,k, 12.0\,k]} & 18.2\,k {\scriptsize[18.1\,k, 18.4\,k]} & 10.9\,k {\scriptsize[10.8\,k, 11.3\,k]} & 1.56 {\scriptsize[1.54, 1.58]} & 0.93 {\scriptsize[0.93, 0.94]}\\
+$2^{13}$ & 24.7\,k {\scriptsize[24.4\,k, 25.0\,k]} & 40.7\,k {\scriptsize[40.5\,k, 41.0\,k]} & 24.7\,k {\scriptsize[24.4\,k, 24.9\,k]} & 1.66 {\scriptsize[1.65, 1.68]} & 1.00 {\scriptsize[0.98, 1.02]}\\
+$2^{14}$ & 52.4\,k {\scriptsize[52.0\,k, 52.9\,k]} & 88.5\,k {\scriptsize[87.7\,k, 89.2\,k]} & 58.2\,k {\scriptsize[57.3\,k, 58.8\,k]} & 1.68 {\scriptsize[1.67, 1.69]} & 1.12 {\scriptsize[1.10, 1.14]}\\
+$2^{15}$ & 136.0\,k {\scriptsize[134.0\,k, 143.3\,k]} & 198.7\,k {\scriptsize[196.9\,k, 204.6\,k]} & 125.6\,k {\scriptsize[123.8\,k, 130.5\,k]} & 1.45 {\scriptsize[1.42, 1.46]} & 0.92 {\scriptsize[0.91, 0.93]}\\
+$2^{16}$ & 405.7\,k {\scriptsize[400.0\,k, 409.7\,k]} & 523.1\,k {\scriptsize[519.1\,k, 528.0\,k]} & 284.3\,k {\scriptsize[281.4\,k, 287.0\,k]} & 1.31 {\scriptsize[1.29, 1.33]} & 0.71 {\scriptsize[0.70, 0.71]}\\
+$2^{17}$ & 999.9\,k {\scriptsize[991.1\,k, 1.008\,M]} & 1.866\,M {\scriptsize[1.850\,M, 1.876\,M]} & 702.1\,k {\scriptsize[687.6\,k, 712.8\,k]} & 1.86 {\scriptsize[1.84, 1.87]} & 0.70 {\scriptsize[0.69, 0.71]}\\
+$2^{18}$ & 2.083\,M {\scriptsize[2.059\,M, 2.100\,M]} & 4.027\,M {\scriptsize[3.977\,M, 4.054\,M]} & 1.486\,M {\scriptsize[1.471\,M, 1.495\,M]} & 1.91 {\scriptsize[1.90, 1.94]} & 0.72 {\scriptsize[0.71, 0.73]}\\
+$2^{19}$ & 4.599\,M {\scriptsize[4.536\,M, 4.679\,M]} & 8.812\,M {\scriptsize[8.739\,M, 8.854\,M]} & 5.187\,M {\scriptsize[5.157\,M, 5.221\,M]} & 1.90 {\scriptsize[1.89, 1.93]} & 1.13 {\scriptsize[1.11, 1.14]}\\
+$2^{20}$ & 12.501\,M {\scriptsize[12.066\,M, 12.788\,M]} & 18.515\,M {\scriptsize[18.254\,M, 18.966\,M]} & 10.232\,M {\scriptsize[10.180\,M, 10.375\,M]} & 1.51 {\scriptsize[1.45, 1.57]} & 0.85 {\scriptsize[0.84, 0.87]}\\
 \bottomrule\end{tabular}\end{table}
 
 \begin{table}[h]\centering
@@ -45,21 +45,21 @@ $2^{20}$ & 12.499\,M {\scriptsize[12.242\,M, 12.947\,M]} & 19.083\,M {\scriptsiz
 (\texttt{FASTFFT\_SIMD\_BYTES}), median ns per transform [95\,\% CI]; SimdFFT for reference.}\label{tab:width}
 \begin{tabular}{rllll}\toprule
 $N$ & 128 bit & 256 bit & 512 bit & SimdFFT\\\midrule
-$2^{6}$ & 64.4 {\scriptsize[64.1, 66.4]} & 50.0 {\scriptsize[49.5, 50.5]} & 35.0 {\scriptsize[34.7, 35.2]} & 114 {\scriptsize[112, 116]}\\
-$2^{7}$ & 135 {\scriptsize[135, 136]} & 105 {\scriptsize[104, 106]} & 69.0 {\scriptsize[68.5, 69.7]} & 237 {\scriptsize[235, 238]}\\
-$2^{8}$ & 333 {\scriptsize[331, 335]} & 221 {\scriptsize[220, 222]} & 162 {\scriptsize[161, 164]} & 468 {\scriptsize[464, 471]}\\
-$2^{9}$ & 690 {\scriptsize[685, 696]} & 445 {\scriptsize[442, 449]} & 302 {\scriptsize[298, 305]} & 1018 {\scriptsize[1010, 1031]}\\
-$2^{10}$ & 1502 {\scriptsize[1492, 1513]} & 980 {\scriptsize[977, 986]} & 655 {\scriptsize[649, 659]} & 2147 {\scriptsize[2134, 2159]}\\
-$2^{11}$ & 3323 {\scriptsize[3313, 3340]} & 2332 {\scriptsize[2300, 2375]} & 1793 {\scriptsize[1784, 1807]} & 4942 {\scriptsize[4917, 4959]}\\
-$2^{12}$ & 8781 {\scriptsize[8742, 8819]} & 6660 {\scriptsize[6515, 7907]} & 4895 {\scriptsize[4866, 4922]} & 12.2\,k {\scriptsize[12.1\,k, 12.2\,k]}\\
-$2^{13}$ & 18.6\,k {\scriptsize[18.5\,k, 18.7\,k]} & 13.4\,k {\scriptsize[13.4\,k, 13.6\,k]} & 10.1\,k {\scriptsize[9997, 10.2\,k]} & 29.3\,k {\scriptsize[29.2\,k, 29.4\,k]}\\
-$2^{14}$ & 40.6\,k {\scriptsize[39.3\,k, 40.8\,k]} & 28.2\,k {\scriptsize[27.9\,k, 28.9\,k]} & 20.5\,k {\scriptsize[20.3\,k, 20.6\,k]} & 59.1\,k {\scriptsize[58.8\,k, 59.5\,k]}\\
-$2^{15}$ & 129.7\,k {\scriptsize[129.2\,k, 130.2\,k]} & 73.8\,k {\scriptsize[73.5\,k, 74.1\,k]} & 45.6\,k {\scriptsize[45.2\,k, 46.2\,k]} & 134.7\,k {\scriptsize[134.2\,k, 135.7\,k]}\\
-$2^{16}$ & 296.3\,k {\scriptsize[294.1\,k, 299.4\,k]} & 201.6\,k {\scriptsize[200.1\,k, 203.7\,k]} & 140.9\,k {\scriptsize[140.4\,k, 141.7\,k]} & 271.7\,k {\scriptsize[269.7\,k, 273.6\,k]}\\
-$2^{17}$ & 642.0\,k {\scriptsize[639.1\,k, 645.7\,k]} & 458.7\,k {\scriptsize[454.1\,k, 464.8\,k]} & 418.3\,k {\scriptsize[410.7\,k, 423.7\,k]} & 726.4\,k {\scriptsize[719.1\,k, 739.8\,k]}\\
-$2^{18}$ & 1.432\,M {\scriptsize[1.423\,M, 1.448\,M]} & 1.083\,M {\scriptsize[1.072\,M, 1.089\,M]} & 1.008\,M {\scriptsize[1.001\,M, 1.015\,M]} & 1.808\,M {\scriptsize[1.792\,M, 1.832\,M]}\\
-$2^{19}$ & 3.753\,M {\scriptsize[3.724\,M, 3.778\,M]} & 2.538\,M {\scriptsize[2.520\,M, 2.548\,M]} & 2.068\,M {\scriptsize[2.059\,M, 2.082\,M]} & 4.355\,M {\scriptsize[4.319\,M, 4.402\,M]}\\
-$2^{20}$ & 8.402\,M {\scriptsize[8.341\,M, 8.485\,M]} & 5.956\,M {\scriptsize[5.845\,M, 5.999\,M]} & 5.524\,M {\scriptsize[5.439\,M, 5.616\,M]} & 9.040\,M {\scriptsize[8.948\,M, 9.148\,M]}\\
+$2^{6}$ & 65.2 {\scriptsize[64.7, 65.9]} & 48.2 {\scriptsize[48.0, 48.4]} & 35.8 {\scriptsize[34.8, 36.7]} & 117 {\scriptsize[116, 122]}\\
+$2^{7}$ & 134 {\scriptsize[133, 134]} & 101 {\scriptsize[101, 101]} & 69.8 {\scriptsize[69.5, 70.2]} & 236 {\scriptsize[235, 239]}\\
+$2^{8}$ & 337 {\scriptsize[334, 342]} & 222 {\scriptsize[220, 223]} & 163 {\scriptsize[161, 165]} & 471 {\scriptsize[469, 475]}\\
+$2^{9}$ & 682 {\scriptsize[678, 688]} & 448 {\scriptsize[446, 451]} & 315 {\scriptsize[311, 318]} & 1035 {\scriptsize[1028, 1051]}\\
+$2^{10}$ & 1490 {\scriptsize[1483, 1502]} & 989 {\scriptsize[978, 1004]} & 658 {\scriptsize[650, 663]} & 2123 {\scriptsize[2113, 2142]}\\
+$2^{11}$ & 3300 {\scriptsize[3280, 3316]} & 2272 {\scriptsize[2260, 2311]} & 1800 {\scriptsize[1789, 1813]} & 4967 {\scriptsize[4947, 4999]}\\
+$2^{12}$ & 9133 {\scriptsize[8964, 9289]} & 6146 {\scriptsize[6123, 6175]} & 4926 {\scriptsize[4906, 4952]} & 12.5\,k {\scriptsize[12.3\,k, 12.9\,k]}\\
+$2^{13}$ & 18.9\,k {\scriptsize[18.7\,k, 19.0\,k]} & 13.2\,k {\scriptsize[13.1\,k, 13.3\,k]} & 10.3\,k {\scriptsize[10.2\,k, 10.4\,k]} & 30.1\,k {\scriptsize[29.9\,k, 30.6\,k]}\\
+$2^{14}$ & 41.5\,k {\scriptsize[39.8\,k, 42.2\,k]} & 27.6\,k {\scriptsize[27.5\,k, 27.9\,k]} & 21.4\,k {\scriptsize[21.1\,k, 21.6\,k]} & 60.9\,k {\scriptsize[60.4\,k, 61.4\,k]}\\
+$2^{15}$ & 135.7\,k {\scriptsize[133.8\,k, 140.4\,k]} & 74.6\,k {\scriptsize[74.0\,k, 75.3\,k]} & 45.0\,k {\scriptsize[44.5\,k, 45.6\,k]} & 133.0\,k {\scriptsize[132.7\,k, 133.6\,k]}\\
+$2^{16}$ & 299.8\,k {\scriptsize[297.0\,k, 305.3\,k]} & 184.0\,k {\scriptsize[183.1\,k, 185.3\,k]} & 143.2\,k {\scriptsize[141.3\,k, 145.7\,k]} & 275.8\,k {\scriptsize[274.0\,k, 278.1\,k]}\\
+$2^{17}$ & 641.1\,k {\scriptsize[639.7\,k, 644.8\,k]} & 449.9\,k {\scriptsize[447.1\,k, 453.7\,k]} & 411.5\,k {\scriptsize[406.9\,k, 416.6\,k]} & 734.3\,k {\scriptsize[721.2\,k, 742.5\,k]}\\
+$2^{18}$ & 1.413\,M {\scriptsize[1.407\,M, 1.417\,M]} & 1.070\,M {\scriptsize[1.066\,M, 1.076\,M]} & 1.031\,M {\scriptsize[1.021\,M, 1.042\,M]} & 1.835\,M {\scriptsize[1.814\,M, 1.851\,M]}\\
+$2^{19}$ & 3.826\,M {\scriptsize[3.769\,M, 3.896\,M]} & 2.541\,M {\scriptsize[2.528\,M, 2.552\,M]} & 2.105\,M {\scriptsize[2.083\,M, 2.121\,M]} & 4.429\,M {\scriptsize[4.378\,M, 4.506\,M]}\\
+$2^{20}$ & 8.354\,M {\scriptsize[8.325\,M, 8.396\,M]} & 6.035\,M {\scriptsize[6.011\,M, 6.068\,M]} & 5.474\,M {\scriptsize[5.427\,M, 5.542\,M]} & 8.954\,M {\scriptsize[8.908\,M, 9.016\,M]}\\
 \bottomrule\end{tabular}\end{table}
 
 \begin{table}[h]\centering
@@ -67,27 +67,75 @@ $2^{20}$ & 8.402\,M {\scriptsize[8.341\,M, 8.485\,M]} & 5.956\,M {\scriptsize[5.
 emulation), median ns per transform [95\,\% CI].}\label{tab:libcxx}
 \begin{tabular}{rllll}\toprule
 $N$ & fastfft, libstdc++ & fastfft, libc++ & SimdFFT, libstdc++ & SimdFFT, libc++\\\midrule
-$2^{6}$ & 35.0 {\scriptsize[34.7, 35.2]} & 162 {\scriptsize[160, 162]} & 114 {\scriptsize[112, 116]} & 226 {\scriptsize[225, 227]}\\
-$2^{7}$ & 69.0 {\scriptsize[68.5, 69.7]} & 721 {\scriptsize[716, 732]} & 237 {\scriptsize[235, 238]} & 461 {\scriptsize[457, 465]}\\
-$2^{8}$ & 162 {\scriptsize[161, 164]} & 1382 {\scriptsize[1375, 1392]} & 468 {\scriptsize[464, 471]} & 879 {\scriptsize[871, 887]}\\
-$2^{9}$ & 302 {\scriptsize[298, 305]} & 2763 {\scriptsize[2752, 2771]} & 1018 {\scriptsize[1010, 1031]} & 1961 {\scriptsize[1954, 1977]}\\
-$2^{10}$ & 655 {\scriptsize[649, 659]} & 6141 {\scriptsize[6097, 6186]} & 2147 {\scriptsize[2134, 2159]} & 4039 {\scriptsize[4019, 4097]}\\
-$2^{11}$ & 1793 {\scriptsize[1784, 1807]} & 18.0\,k {\scriptsize[17.7\,k, 18.4\,k]} & 4942 {\scriptsize[4917, 4959]} & 9468 {\scriptsize[9323, 9630]}\\
-$2^{12}$ & 4895 {\scriptsize[4866, 4922]} & 36.1\,k {\scriptsize[35.9\,k, 36.2\,k]} & 12.2\,k {\scriptsize[12.1\,k, 12.2\,k]} & 20.8\,k {\scriptsize[20.7\,k, 20.9\,k]}\\
-$2^{13}$ & 10.1\,k {\scriptsize[9997, 10.2\,k]} & 73.0\,k {\scriptsize[72.5\,k, 73.9\,k]} & 29.3\,k {\scriptsize[29.2\,k, 29.4\,k]} & 46.8\,k {\scriptsize[46.6\,k, 47.5\,k]}\\
-$2^{14}$ & 20.5\,k {\scriptsize[20.3\,k, 20.6\,k]} & 158.3\,k {\scriptsize[157.5\,k, 160.1\,k]} & 59.1\,k {\scriptsize[58.8\,k, 59.5\,k]} & 97.8\,k {\scriptsize[96.2\,k, 99.2\,k]}\\
-$2^{15}$ & 45.6\,k {\scriptsize[45.2\,k, 46.2\,k]} & 403.3\,k {\scriptsize[399.4\,k, 408.8\,k]} & 134.7\,k {\scriptsize[134.2\,k, 135.7\,k]} & 211.8\,k {\scriptsize[210.6\,k, 213.7\,k]}\\
-$2^{16}$ & 140.9\,k {\scriptsize[140.4\,k, 141.7\,k]} & 839.8\,k {\scriptsize[831.3\,k, 853.3\,k]} & 271.7\,k {\scriptsize[269.7\,k, 273.6\,k]} & 444.1\,k {\scriptsize[441.4\,k, 452.7\,k]}\\
-$2^{17}$ & 418.3\,k {\scriptsize[410.7\,k, 423.7\,k]} & 1.738\,M {\scriptsize[1.724\,M, 1.751\,M]} & 726.4\,k {\scriptsize[719.1\,k, 739.8\,k]} & 1.046\,M {\scriptsize[1.036\,M, 1.060\,M]}\\
-$2^{18}$ & 1.008\,M {\scriptsize[1.001\,M, 1.015\,M]} & 3.664\,M {\scriptsize[3.646\,M, 3.685\,M]} & 1.808\,M {\scriptsize[1.792\,M, 1.832\,M]} & 2.322\,M {\scriptsize[2.307\,M, 2.348\,M]}\\
-$2^{19}$ & 2.068\,M {\scriptsize[2.059\,M, 2.082\,M]} & 8.803\,M {\scriptsize[8.709\,M, 8.907\,M]} & 4.355\,M {\scriptsize[4.319\,M, 4.402\,M]} & 5.370\,M {\scriptsize[5.314\,M, 5.450\,M]}\\
-$2^{20}$ & 5.524\,M {\scriptsize[5.439\,M, 5.616\,M]} & 19.276\,M {\scriptsize[19.058\,M, 19.409\,M]} & 9.040\,M {\scriptsize[8.948\,M, 9.148\,M]} & 11.230\,M {\scriptsize[11.106\,M, 11.333\,M]}\\
+$2^{6}$ & 35.8 {\scriptsize[34.8, 36.7]} & 165 {\scriptsize[162, 167]} & 117 {\scriptsize[116, 122]} & 232 {\scriptsize[230, 236]}\\
+$2^{7}$ & 69.8 {\scriptsize[69.5, 70.2]} & 791 {\scriptsize[784, 799]} & 236 {\scriptsize[235, 239]} & 456 {\scriptsize[454, 460]}\\
+$2^{8}$ & 163 {\scriptsize[161, 165]} & 1493 {\scriptsize[1483, 1524]} & 471 {\scriptsize[469, 475]} & 889 {\scriptsize[882, 903]}\\
+$2^{9}$ & 315 {\scriptsize[311, 318]} & 2881 {\scriptsize[2843, 2909]} & 1035 {\scriptsize[1028, 1051]} & 1990 {\scriptsize[1975, 2000]}\\
+$2^{10}$ & 658 {\scriptsize[650, 663]} & 6423 {\scriptsize[6379, 6482]} & 2123 {\scriptsize[2113, 2142]} & 4143 {\scriptsize[4119, 4167]}\\
+$2^{11}$ & 1800 {\scriptsize[1789, 1813]} & 18.2\,k {\scriptsize[18.1\,k, 18.3\,k]} & 4967 {\scriptsize[4947, 4999]} & 9284 {\scriptsize[9208, 9353]}\\
+$2^{12}$ & 4926 {\scriptsize[4906, 4952]} & 37.0\,k {\scriptsize[36.7\,k, 37.1\,k]} & 12.5\,k {\scriptsize[12.3\,k, 12.9\,k]} & 21.0\,k {\scriptsize[20.9\,k, 21.2\,k]}\\
+$2^{13}$ & 10.3\,k {\scriptsize[10.2\,k, 10.4\,k]} & 74.6\,k {\scriptsize[73.7\,k, 76.5\,k]} & 30.1\,k {\scriptsize[29.9\,k, 30.6\,k]} & 46.8\,k {\scriptsize[46.4\,k, 48.1\,k]}\\
+$2^{14}$ & 21.4\,k {\scriptsize[21.1\,k, 21.6\,k]} & 160.7\,k {\scriptsize[159.8\,k, 165.5\,k]} & 60.9\,k {\scriptsize[60.4\,k, 61.4\,k]} & 98.8\,k {\scriptsize[97.2\,k, 105.4\,k]}\\
+$2^{15}$ & 45.0\,k {\scriptsize[44.5\,k, 45.6\,k]} & 401.9\,k {\scriptsize[399.3\,k, 405.2\,k]} & 133.0\,k {\scriptsize[132.7\,k, 133.6\,k]} & 209.7\,k {\scriptsize[208.0\,k, 212.4\,k]}\\
+$2^{16}$ & 143.2\,k {\scriptsize[141.3\,k, 145.7\,k]} & 839.8\,k {\scriptsize[833.3\,k, 856.2\,k]} & 275.8\,k {\scriptsize[274.0\,k, 278.1\,k]} & 443.7\,k {\scriptsize[438.0\,k, 451.4\,k]}\\
+$2^{17}$ & 411.5\,k {\scriptsize[406.9\,k, 416.6\,k]} & 1.756\,M {\scriptsize[1.736\,M, 1.779\,M]} & 734.3\,k {\scriptsize[721.2\,k, 742.5\,k]} & 1.038\,M {\scriptsize[1.029\,M, 1.057\,M]}\\
+$2^{18}$ & 1.031\,M {\scriptsize[1.021\,M, 1.042\,M]} & 3.792\,M {\scriptsize[3.758\,M, 3.837\,M]} & 1.835\,M {\scriptsize[1.814\,M, 1.851\,M]} & 2.379\,M {\scriptsize[2.359\,M, 2.410\,M]}\\
+$2^{19}$ & 2.105\,M {\scriptsize[2.083\,M, 2.121\,M]} & 9.006\,M {\scriptsize[8.951\,M, 9.051\,M]} & 4.429\,M {\scriptsize[4.378\,M, 4.506\,M]} & 5.314\,M {\scriptsize[5.237\,M, 5.347\,M]}\\
+$2^{20}$ & 5.474\,M {\scriptsize[5.427\,M, 5.542\,M]} & 19.933\,M {\scriptsize[19.450\,M, 20.493\,M]} & 8.954\,M {\scriptsize[8.908\,M, 9.016\,M]} & 11.341\,M {\scriptsize[11.250\,M, 11.429\,M]}\\
+\bottomrule\end{tabular}\end{table}
+
+\begin{table}[h]\centering
+\caption{GCC trunk (17.0) with \texttt{-std=c++26}, complex float: median ns per transform [95\,\% CI].
+fastfft on \texttt{<experimental/simd>} (GCC 14 and trunk), on C++26 \texttt{std::simd}, and fastfft::cx on
+\texttt{std::simd::vec<std::complex<float>{}>} (plain, and with zip/broadcast via \texttt{bit\_cast} to a real
+vector); SimdFFT built with trunk for reference.}\label{tab:gcc17-float}
+\begin{tabular}{rllllll}\toprule
+$N$ & exp., GCC 14 & exp., trunk & C++26 & cx & cx, bit\_cast & SimdFFT\\\midrule
+$2^{6}$ & 35.8 {\scriptsize[34.8, 36.7]} & 35.3 {\scriptsize[35.1, 35.5]} & 44.0 {\scriptsize[43.7, 44.6]} & 57.8 {\scriptsize[57.1, 58.5]} & 46.7 {\scriptsize[46.4, 46.9]} & 106 {\scriptsize[105, 107]}\\
+$2^{7}$ & 69.8 {\scriptsize[69.5, 70.2]} & 75.7 {\scriptsize[72.1, 86.3]} & 83.8 {\scriptsize[83.5, 84.4]} & 108 {\scriptsize[108, 109]} & 92.6 {\scriptsize[92.1, 93.3]} & 219 {\scriptsize[218, 220]}\\
+$2^{8}$ & 163 {\scriptsize[161, 165]} & 173 {\scriptsize[167, 176]} & 182 {\scriptsize[181, 184]} & 240 {\scriptsize[239, 242]} & 198 {\scriptsize[197, 200]} & 445 {\scriptsize[442, 447]}\\
+$2^{9}$ & 315 {\scriptsize[311, 318]} & 302 {\scriptsize[299, 307]} & 340 {\scriptsize[336, 343]} & 499 {\scriptsize[496, 507]} & 389 {\scriptsize[387, 392]} & 988 {\scriptsize[981, 997]}\\
+$2^{10}$ & 658 {\scriptsize[650, 663]} & 654 {\scriptsize[641, 660]} & 719 {\scriptsize[703, 742]} & 1063 {\scriptsize[1053, 1079]} & 817 {\scriptsize[813, 821]} & 2096 {\scriptsize[2072, 2163]}\\
+$2^{11}$ & 1800 {\scriptsize[1789, 1813]} & 1813 {\scriptsize[1799, 1824]} & 1809 {\scriptsize[1805, 1819]} & 2257 {\scriptsize[2245, 2271]} & 1931 {\scriptsize[1907, 1952]} & 4809 {\scriptsize[4782, 4853]}\\
+$2^{12}$ & 4926 {\scriptsize[4906, 4952]} & 5043 {\scriptsize[5000, 5089]} & 5020 {\scriptsize[4996, 5056]} & 5814 {\scriptsize[5777, 5858]} & 4970 {\scriptsize[4932, 4998]} & 12.1\,k {\scriptsize[12.1\,k, 12.2\,k]}\\
+$2^{13}$ & 10.3\,k {\scriptsize[10.2\,k, 10.4\,k]} & 10.2\,k {\scriptsize[10.0\,k, 10.3\,k]} & 10.7\,k {\scriptsize[10.5\,k, 10.8\,k]} & 12.6\,k {\scriptsize[12.6\,k, 12.7\,k]} & 10.7\,k {\scriptsize[10.6\,k, 11.1\,k]} & 29.3\,k {\scriptsize[29.2\,k, 29.4\,k]}\\
+$2^{14}$ & 21.4\,k {\scriptsize[21.1\,k, 21.6\,k]} & 20.5\,k {\scriptsize[20.4\,k, 20.6\,k]} & 21.4\,k {\scriptsize[21.1\,k, 21.7\,k]} & 25.9\,k {\scriptsize[25.7\,k, 26.3\,k]} & 20.9\,k {\scriptsize[20.8\,k, 21.1\,k]} & 59.0\,k {\scriptsize[58.6\,k, 59.4\,k]}\\
+$2^{15}$ & 45.0\,k {\scriptsize[44.5\,k, 45.6\,k]} & 44.2\,k {\scriptsize[44.0\,k, 44.5\,k]} & 47.7\,k {\scriptsize[47.4\,k, 48.1\,k]} & 54.1\,k {\scriptsize[53.8\,k, 54.8\,k]} & 46.0\,k {\scriptsize[45.8\,k, 46.5\,k]} & 134.2\,k {\scriptsize[133.5\,k, 135.0\,k]}\\
+$2^{16}$ & 143.2\,k {\scriptsize[141.3\,k, 145.7\,k]} & 139.5\,k {\scriptsize[137.8\,k, 143.9\,k]} & 136.9\,k {\scriptsize[135.6\,k, 137.9\,k]} & 129.4\,k {\scriptsize[128.4\,k, 130.4\,k]} & 120.6\,k {\scriptsize[119.1\,k, 122.0\,k]} & 273.4\,k {\scriptsize[272.4\,k, 275.1\,k]}\\
+$2^{17}$ & 411.5\,k {\scriptsize[406.9\,k, 416.6\,k]} & 395.9\,k {\scriptsize[390.5\,k, 398.2\,k]} & 398.9\,k {\scriptsize[388.3\,k, 403.1\,k]} & 353.7\,k {\scriptsize[349.6\,k, 358.1\,k]} & 337.5\,k {\scriptsize[335.3\,k, 340.0\,k]} & 717.0\,k {\scriptsize[706.2\,k, 730.2\,k]}\\
+$2^{18}$ & 1.031\,M {\scriptsize[1.021\,M, 1.042\,M]} & 1.009\,M {\scriptsize[997.7\,k, 1.019\,M]} & 1.005\,M {\scriptsize[998.9\,k, 1.013\,M]} & 883.7\,k {\scriptsize[880.2\,k, 890.0\,k]} & 908.8\,k {\scriptsize[901.5\,k, 915.2\,k]} & 1.805\,M {\scriptsize[1.794\,M, 1.812\,M]}\\
+$2^{19}$ & 2.105\,M {\scriptsize[2.083\,M, 2.121\,M]} & 2.041\,M {\scriptsize[2.034\,M, 2.053\,M]} & 2.147\,M {\scriptsize[2.120\,M, 2.173\,M]} & 1.902\,M {\scriptsize[1.887\,M, 1.920\,M]} & 1.948\,M {\scriptsize[1.927\,M, 1.960\,M]} & 4.531\,M {\scriptsize[4.470\,M, 4.587\,M]}\\
+$2^{20}$ & 5.474\,M {\scriptsize[5.427\,M, 5.542\,M]} & 4.957\,M {\scriptsize[4.865\,M, 5.049\,M]} & 5.837\,M {\scriptsize[5.736\,M, 5.979\,M]} & 5.116\,M {\scriptsize[5.068\,M, 5.231\,M]} & 4.680\,M {\scriptsize[4.654\,M, 4.705\,M]} & 9.211\,M {\scriptsize[9.058\,M, 9.323\,M]}\\
+\bottomrule\end{tabular}\end{table}
+
+\begin{table}[h]\centering
+\caption{GCC trunk (17.0) with \texttt{-std=c++26}, complex double: median ns per transform [95\,\% CI].
+fastfft on \texttt{<experimental/simd>} (GCC 14 and trunk), on C++26 \texttt{std::simd}, and fastfft::cx on
+\texttt{std::simd::vec<std::complex<double>{}>} (plain, and with zip/broadcast via \texttt{bit\_cast} to a real
+vector); SimdFFT built with trunk for reference.}\label{tab:gcc17-double}
+\begin{tabular}{rllllll}\toprule
+$N$ & exp., GCC 14 & exp., trunk & C++26 & cx & cx, bit\_cast & SimdFFT\\\midrule
+$2^{6}$ & 74.7 {\scriptsize[73.2, 76.2]} & 78.6 {\scriptsize[75.7, 79.7]} & 87.1 {\scriptsize[85.7, 88.3]} & 108 {\scriptsize[107, 110]} & 94.3 {\scriptsize[91.8, 98.8]} & 132 {\scriptsize[131, 133]}\\
+$2^{7}$ & 161 {\scriptsize[159, 164]} & 164 {\scriptsize[162, 167]} & 179 {\scriptsize[176, 181]} & 227 {\scriptsize[226, 229]} & 191 {\scriptsize[189, 193]} & 284 {\scriptsize[281, 286]}\\
+$2^{8}$ & 382 {\scriptsize[379, 385]} & 372 {\scriptsize[368, 374]} & 434 {\scriptsize[430, 440]} & 483 {\scriptsize[479, 488]} & 455 {\scriptsize[451, 459]} & 608 {\scriptsize[602, 610]}\\
+$2^{9}$ & 837 {\scriptsize[827, 851]} & 813 {\scriptsize[807, 822]} & 944 {\scriptsize[934, 954]} & 1092 {\scriptsize[1078, 1107]} & 954 {\scriptsize[940, 967]} & 1444 {\scriptsize[1414, 1485]}\\
+$2^{10}$ & 2146 {\scriptsize[2130, 2163]} & 2185 {\scriptsize[2166, 2209]} & 2206 {\scriptsize[2195, 2226]} & 2282 {\scriptsize[2274, 2310]} & 2114 {\scriptsize[2099, 2129]} & 3251 {\scriptsize[3237, 3288]}\\
+$2^{11}$ & 4992 {\scriptsize[4953, 5017]} & 5105 {\scriptsize[5047, 5165]} & 4962 {\scriptsize[4907, 5009]} & 4984 {\scriptsize[4948, 5030]} & 4939 {\scriptsize[4870, 4994]} & 10.1\,k {\scriptsize[10.0\,k, 10.1\,k]}\\
+$2^{12}$ & 11.8\,k {\scriptsize[11.7\,k, 12.0\,k]} & 11.5\,k {\scriptsize[11.4\,k, 11.6\,k]} & 12.0\,k {\scriptsize[11.9\,k, 12.0\,k]} & 12.7\,k {\scriptsize[12.6\,k, 12.8\,k]} & 11.8\,k {\scriptsize[11.6\,k, 12.2\,k]} & 18.0\,k {\scriptsize[18.0\,k, 18.1\,k]}\\
+$2^{13}$ & 24.7\,k {\scriptsize[24.4\,k, 25.0\,k]} & 23.8\,k {\scriptsize[23.6\,k, 24.0\,k]} & 24.4\,k {\scriptsize[24.3\,k, 24.6\,k]} & 26.1\,k {\scriptsize[25.8\,k, 26.2\,k]} & 23.6\,k {\scriptsize[23.4\,k, 23.9\,k]} & 39.9\,k {\scriptsize[39.8\,k, 40.1\,k]}\\
+$2^{14}$ & 52.4\,k {\scriptsize[52.0\,k, 52.9\,k]} & 49.6\,k {\scriptsize[49.4\,k, 49.9\,k]} & 52.9\,k {\scriptsize[52.2\,k, 53.4\,k]} & 54.1\,k {\scriptsize[53.7\,k, 54.4\,k]} & 49.6\,k {\scriptsize[49.4\,k, 49.7\,k]} & 87.6\,k {\scriptsize[87.3\,k, 88.0\,k]}\\
+$2^{15}$ & 136.0\,k {\scriptsize[134.0\,k, 143.3\,k]} & 135.9\,k {\scriptsize[133.7\,k, 137.7\,k]} & 133.4\,k {\scriptsize[132.1\,k, 135.2\,k]} & 117.0\,k {\scriptsize[116.6\,k, 117.9\,k]} & 114.4\,k {\scriptsize[112.4\,k, 115.2\,k]} & 200.5\,k {\scriptsize[199.5\,k, 201.4\,k]}\\
+$2^{16}$ & 405.7\,k {\scriptsize[400.0\,k, 409.7\,k]} & 399.7\,k {\scriptsize[394.2\,k, 404.0\,k]} & 386.0\,k {\scriptsize[382.6\,k, 402.1\,k]} & 354.8\,k {\scriptsize[350.5\,k, 361.5\,k]} & 344.9\,k {\scriptsize[343.0\,k, 347.1\,k]} & 540.2\,k {\scriptsize[532.0\,k, 549.1\,k]}\\
+$2^{17}$ & 999.9\,k {\scriptsize[991.1\,k, 1.008\,M]} & 1.008\,M {\scriptsize[998.0\,k, 1.019\,M]} & 1.015\,M {\scriptsize[1.005\,M, 1.027\,M]} & 899.3\,k {\scriptsize[891.9\,k, 905.9\,k]} & 880.9\,k {\scriptsize[874.2\,k, 885.1\,k]} & 1.860\,M {\scriptsize[1.836\,M, 1.881\,M]}\\
+$2^{18}$ & 2.083\,M {\scriptsize[2.059\,M, 2.100\,M]} & 2.103\,M {\scriptsize[2.070\,M, 2.139\,M]} & 2.182\,M {\scriptsize[2.149\,M, 2.200\,M]} & 2.005\,M {\scriptsize[1.983\,M, 2.027\,M]} & 1.928\,M {\scriptsize[1.912\,M, 1.947\,M]} & 4.134\,M {\scriptsize[4.089\,M, 4.175\,M]}\\
+$2^{19}$ & 4.599\,M {\scriptsize[4.536\,M, 4.679\,M]} & 4.199\,M {\scriptsize[4.173\,M, 4.236\,M]} & 5.022\,M {\scriptsize[4.920\,M, 5.213\,M]} & 4.422\,M {\scriptsize[4.350\,M, 4.528\,M]} & 3.824\,M {\scriptsize[3.791\,M, 3.861\,M]} & 8.947\,M {\scriptsize[8.887\,M, 9.026\,M]}\\
+$2^{20}$ & 12.501\,M {\scriptsize[12.066\,M, 12.788\,M]} & 10.151\,M {\scriptsize[10.061\,M, 10.241\,M]} & 13.141\,M {\scriptsize[12.723\,M, 13.383\,M]} & 11.766\,M {\scriptsize[11.528\,M, 11.989\,M]} & 9.922\,M {\scriptsize[9.834\,M, 10.069\,M]} & 19.523\,M {\scriptsize[18.817\,M, 19.845\,M]}\\
 \bottomrule\end{tabular}\end{table}
 
 \begin{table}[h]\centering
 \caption{Accuracy: largest $\max_k|X_k-\hat X_k|/\max_k|\hat X_k|$ over all $N$, against a long-double reference.}\label{tab:acc}
 \begin{tabular}{lccc}\toprule & fastfft & SimdFFT & FFTW\\\midrule
-float & \num{2.1e-7} & \num{4.8e-7} & \num{2.4e-7}\\
+float & \num{2.1e-7} & \num{4.8e-7} & \num{2.1e-7}\\
 double & \num{6.0e-16} & \num{8.4e-16} & \num{3.3e-16}\\
 \bottomrule\end{tabular}\end{table}
 

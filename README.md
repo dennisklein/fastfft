@@ -115,7 +115,7 @@ clang build uses libc++, where vir-simd only emulates simd, and the patch then k
 
 | host | kernel data | gr4 patch data |
 |---|---|---|
-| Intel Xeon VM, 4 vCPU, AVX-512, GCC 14.2 | `results/vm-20261010-1949/summary.md` | `results/vm-20261010-2000-gr4/summary.md` |
+| Intel Xeon VM, 4 vCPU, AVX-512, GCC 14.2 + GCC trunk (C++26) | `results/vm-20261010-2129/summary.md` | `results/vm-20261010-2000-gr4/summary.md` |
 
 ## Building the paper
 
