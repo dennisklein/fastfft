@@ -6,6 +6,8 @@
 # Options
 #   FFTBENCH_SIMDFFT    ON   also time gnuradio4's SimdFFT (fetches gnuradio4 + vir-simd sources, headers only)
 #   FFTBENCH_FFTW       AUTO also time FFTW 3 (ON: required, OFF: skip, AUTO: if found); see FFTBENCH_FFTW_ROOT
+#   FFTBENCH_CX         OFF  also time the std::simd::vec<std::complex<T>> variant (GCC >= 17, -std=c++26)
+#   FFTBENCH_STD_FLAG   ""   explicit standard flag, e.g. -std=c++26 (CMake may not know C++26 for new compilers)
 #   FFTBENCH_WIDTHS     ""   extra fastfft builds with a forced vector size in bytes, e.g. "16;32" (width sweep)
 cmake_minimum_required(VERSION 3.24)
 project(fastfft LANGUAGES CXX)
@@ -24,6 +26,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 option(FFTBENCH_SIMDFFT "time gnuradio4 SimdFFT" ON)
+option(FFTBENCH_CX "also time fastfft::cx (C++26 std::simd::vec<std::complex<T>>, needs GCC >= 17 and -std=c++26)" OFF)
 set(FFTBENCH_FFTW AUTO CACHE STRING "time FFTW: ON, OFF or AUTO")
 set(FFTBENCH_FFTW_ROOT "" CACHE PATH "prefix of an FFTW 3 install with both libfftw3 and libfftw3f")
 set(FFTBENCH_WIDTHS "" CACHE STRING "extra forced simd widths in bytes for fastfft, e.g. 16;32")
@@ -48,6 +51,12 @@ if(FFTBENCH_SIMDFFT)
   list(APPEND defs FFTBENCH_WITH_SIMDFFT)
   list(APPEND incs ${gr4_SOURCE_DIR}/algorithm/include ${gr4_SOURCE_DIR}/core/include ${gr4_SOURCE_DIR}/meta/include
        ${gr4_SOURCE_DIR}/third_party/magic_enum ${virsimd_SOURCE_DIR})
+endif()
+
+if(FFTBENCH_CX)
+  list(APPEND defs FFTBENCH_WITH_CX)
+  # complex operator* without the Annex G NaN/Inf recovery path, i.e. like the hand-written complex products
+  add_compile_options(-fcx-limited-range)
 endif()
 
 if(NOT FFTBENCH_FFTW STREQUAL "OFF")

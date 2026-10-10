@@ -8,8 +8,8 @@
 # benchmark --runs times as separate processes pinned to one core, sweeps narrower simd widths for fastfft, and writes
 # everything to results/<hostname>-<date>/ followed by the statistical summary (summary.md). --libcxx additionally
 # builds with that clang and libc++, where vir-simd emulates simd with arrays, and times fastfft and SimdFFT there.
-# --gcc-trunk (a prefix from bench/build_gcc_trunk.sh) additionally times fastfft built with that GCC twice: with
-# C++26 std::simd (label cxx26) and with <experimental/simd> (label trunk-exp), separating API from compiler.
+# --gcc-trunk (a prefix from bench/build_gcc_trunk.sh) adds the GCC trunk / C++26 builds: label gcc17 (all
+# implementations, plus fastfft::cx on std::simd::vec<std::complex<T>>), gcc17-exp and gcc17-cxbc (see below).
 #
 # Needs: cmake >= 3.24, git, python3, a C++23 compiler with libstdc++ >= 14 (GCC >= 14, or clang with libstdc++),
 # util-linux (taskset, lscpu); for --fftw build also make and a C compiler. Default --fftw build compiles FFTW 3.3.10
@@ -91,15 +91,20 @@ if [ -n "$LIBCXX" ]; then
   cmake --build "$BUILD-libcxx" -j"$(nproc)" --target fftbench >>"$OUT/cmake.log"
 fi
 
-if [ -n "$TRUNK" ]; then # fastfft only: gnuradio4's headers are not tested with C++26 / GCC trunk
-  for v in cxx26:OFF trunk-exp:ON; do
-    l=${v%%:*} noStd=${v##*:}
+if [ -n "$TRUNK" ]; then
+  # gcc17:       the full set (fastfft on C++26 std::simd, fastfft::cx, SimdFFT, FFTW) built with GCC trunk, -std=c++26
+  # gcc17-exp:   fastfft on <experimental/simd> with the same compiler (separates the API from the compiler)
+  # gcc17-cxbc:  fastfft::cx with zip/broadcast via bit_cast to a real vector (attributes the cx gap; not portable)
+  for v in gcc17: gcc17-exp:-DFASTFFT_NO_STD_SIMD gcc17-cxbc:-DFASTFFT_CX_EXPERIMENT_BITCAST; do
+    l=${v%%:*} def=${v#*:}
     cmake -S "$ROOT" -B "$BUILD-$l" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER="$TRUNK/bin/g++" \
-          -DFFTBENCH_STD_FLAG=-std=c++26 -DFFTBENCH_SIMDFFT=OFF -DFFTBENCH_FFTW=OFF \
-          -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath,$TRUNK/lib64" \
-          -DCMAKE_CXX_FLAGS="$([ "$noStd" = ON ] && echo -DFASTFFT_NO_STD_SIMD)" >>"$OUT/cmake.log"
+          -DFFTBENCH_STD_FLAG=-std=c++26 -DFFTBENCH_CX=ON "${FFTW_ARGS[@]}" \
+          -DFETCHCONTENT_SOURCE_DIR_GR4="$BUILD/_deps/gr4-src" -DFETCHCONTENT_SOURCE_DIR_VIRSIMD="$BUILD/_deps/virsimd-src" \
+          -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath,$TRUNK/lib64" -DCMAKE_CXX_FLAGS="$def" >>"$OUT/cmake.log"
     cmake --build "$BUILD-$l" -j"$(nproc)" --target fftbench >>"$OUT/cmake.log"
   done
+  echo "check: accuracy of the GCC trunk build"
+  "$BUILD-gcc17/fftbench" --samples 1 --min-sample-ms 0.1 --check --label gcc17 --out "$OUT/check-gcc17.csv" 2>>"$OUT/check.log"
 fi
 
 # --- host record -------------------------------------------------------------------------------------------------
@@ -138,11 +143,16 @@ for r in $(seq 1 "$RUNS"); do
     taskset -c "$CPU" "$BUILD-libcxx/fftbench" --samples "$SAMPLES" --impls fastfft,gr4-SimdFFT --precision float \
       --label libcxx --out "$OUT/libcxx-raw-$r.csv" "${EXTRA[@]}" 2>>"$OUT/run.log"
   fi
-  for l in ${TRUNK:+cxx26 trunk-exp}; do
-    echo "run $r/$RUNS: fastfft built with GCC trunk ($l)"
-    taskset -c "$CPU" "$BUILD-$l/fftbench" --samples "$SAMPLES" --impls fastfft --label "$l" --check \
-      --out "$OUT/$l-raw-$r.csv" "${EXTRA[@]}" 2>>"$OUT/run.log"
-  done
+  if [ -n "$TRUNK" ]; then
+    echo "run $r/$RUNS: GCC trunk, C++26: all implementations"
+    taskset -c "$CPU" "$BUILD-gcc17/fftbench" --samples "$SAMPLES" --label gcc17 \
+      --out "$OUT/gcc17-raw-$r.csv" "${EXTRA[@]}" 2>>"$OUT/run.log"
+    echo "run $r/$RUNS: GCC trunk, experimental simd / cx bit_cast experiment"
+    taskset -c "$CPU" "$BUILD-gcc17-exp/fftbench" --samples "$SAMPLES" --label gcc17-exp --impls fastfft \
+      --out "$OUT/gcc17-exp-raw-$r.csv" "${EXTRA[@]}" 2>>"$OUT/run.log"
+    taskset -c "$CPU" "$BUILD-gcc17-cxbc/fftbench" --samples "$SAMPLES" --label gcc17-cxbc --impls fastfft,fastfft-cx \
+      --out "$OUT/gcc17-cxbc-raw-$r.csv" "${EXTRA[@]}" 2>>"$OUT/run.log"
+  fi
 done
 python3 "$ROOT/bench/analyze.py" "$OUT"
 echo "results in $OUT"

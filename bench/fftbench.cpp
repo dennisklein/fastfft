@@ -7,6 +7,9 @@
 // formed. A sample transforms max(N, 2^16) complex values as consecutive frames of size N (streaming, cache-warm),
 // and is reported as nanoseconds per N-point transform. Raw samples go to CSV; statistics are done by analyze.py.
 #include <fastfft/fft.hpp>
+#ifdef FFTBENCH_WITH_CX
+#include <fastfft/fft_cx.hpp> // C++26 std::simd::vec<std::complex<T>> variant
+#endif
 
 #ifdef FFTBENCH_WITH_SIMDFFT
 #include <gnuradio-4.0/algorithm/fourier/SimdFFT.hpp>
@@ -125,6 +128,14 @@ void runSize(Options& opt, std::size_t N, std::FILE* csv, std::FILE* acc, std::m
                              fast->forward(buf.x + b * buf.N, buf.y + b * buf.N);
                          }
                      }});
+#ifdef FFTBENCH_WITH_CX
+    auto cxf = std::make_shared<fastfft::cx::FFT<T>>(N);
+    impls.push_back({"fastfft-cx", [cxf, &buf] {
+                         for (std::size_t b = 0; b < buf.frames; ++b) {
+                             cxf->forward(buf.x + b * buf.N, buf.y + b * buf.N);
+                         }
+                     }});
+#endif
 #ifdef FFTBENCH_WITH_SIMDFFT
     if (N >= 16) {
         using namespace gr::algorithm;
@@ -207,7 +218,7 @@ Options parse(int argc, char** argv) {
         else if (a == "--impls") o.impls = next();
         else if (a == "--check") o.check = true;
         else {
-            std::fprintf(stderr, "usage: fftbench [--samples 40] [--min-sample-ms 5] [--min-log2 6] [--max-log2 20] [--precision float|double|both] [--label L] [--impls fastfft,gr4-SimdFFT,fftw] [--check] [--out raw.csv]\n");
+            std::fprintf(stderr, "usage: fftbench [--samples 40] [--min-sample-ms 5] [--min-log2 6] [--max-log2 20] [--precision float|double|both] [--label L] [--impls fastfft,fastfft-cx,gr4-SimdFFT,fftw] [--check] [--out raw.csv]\n");
             std::exit(a == "--help" ? 0 : 1);
         }
     }
