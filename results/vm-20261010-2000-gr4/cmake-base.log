@@ -1,0 +1,22 @@
+[1/22] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/Logger.cpp.o
+[2/22] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/Value.cpp.o
+[3/22] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/ValueHelper.cpp.o
+[4/22] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/Settings.cpp.o
+[5/22] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/Block.cpp.o
+[6/22] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/SharedLibrary.cpp.o
+[7/22] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/BlockModel.cpp.o
+[8/22] Building CXX object core/CMakeFiles/gnuradio-blocklib-core.dir/src/BlockRegistry.cpp.o
+[9/22] Building CXX object blocks/fourier/benchmarks/CMakeFiles/bm_fft_stream.dir/bm_fft_stream.cpp.o
+[10/22] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/plugin.cpp.o
+[11/22] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/PmtTypeHelpers.cpp.o
+[12/22] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/Graph.cpp.o
+[13/22] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/PluginLoader.cpp.o
+[14/22] Linking CXX static library core/libgnuradio-core.a
+[15/22] Linking CXX shared library core/libgnuradio-blocklib-core.so
+[16/22] Linking CXX executable blocks/fourier/benchmarks/bm_fft_stream
+[17/22] Building CXX object algorithm/test/CMakeFiles/qa_algorithm_fourier.dir/qa_algorithm_fourier.cpp.o
+[18/22] Linking CXX executable algorithm/test/qa_algorithm_fourier
+[19/22] Building CXX object blocks/fourier/benchmarks/CMakeFiles/bm_fft_block.dir/bm_fft_block.cpp.o
+[20/22] Linking CXX executable blocks/fourier/benchmarks/bm_fft_block
+[21/22] Building CXX object blocks/fourier/test/CMakeFiles/qa_FFT.dir/qa_FFT.cpp.o
+[22/22] Linking CXX executable blocks/fourier/test/qa_FFT

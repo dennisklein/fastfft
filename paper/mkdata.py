@@ -169,9 +169,9 @@ speedup as median of paired per-run ratios [95\\,\\% CI].}\\label{tab:gr4}
     tables.append("\\bottomrule\\end{tabular}\\end{table}\n")
     st = {"float": [], "double": []}
     for name, b, p, s, lo, hi in rows:
-        m = re.match(r"FFT<(float|double)> stream", name)
+        m = re.match(r"FFT<(float32|float64|float|double)> stream", name)
         if m:
-            st[m.group(1)].append(float(s))
+            st[{"float32": "float", "float64": "double"}.get(m.group(1), m.group(1))].append(float(s))
         if "complex<float> - fft" in name and "fftCT" not in name:
             num["GrSpectrumComplex"] = f"{float(s):.2f}$\\times$"
         if name.startswith("float - fft"):

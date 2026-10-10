@@ -1,0 +1,7 @@
+Suite 'FFT overlap': all tests passed (8 asserts in 2 tests)
+Suite 'FFT spectrum physics': all tests passed (904 asserts in 10 tests)
+Suite 'Fourier Transforms': all tests passed (2697 asserts in 10 tests)
+Suite 'global': all tests passed (0 asserts in 0 tests)
+Suite 'FFT common kernel-callable cores': all tests passed (2534 asserts in 15 tests)
+Suite 'FFT algorithms and window functions': all tests passed (233 asserts in 29 tests)
+Suite 'global': all tests passed (0 asserts in 0 tests)

@@ -1,9 +1,9 @@
-# fastfft: a portable std::simd FFT, 2–4x faster than gnuradio4's
+# fastfft: a portable std::simd FFT, up to 3.4x faster than gnuradio4's
 
 `include/fastfft/fft.hpp` is a single-header, power-of-two, complex forward FFT (float and double) written against
-`std::experimental::simd` (`native_simd`), without ISA intrinsics. On an AVX-512 host it is 2.6–4x faster than
-[gnuradio4](https://github.com/fair-acc/gnuradio4)'s `SimdFFT` in single precision, and level with or ahead of FFTW
-3.3.10 with AVX-512 codelets. The paper in `paper/` explains how and reports the measurements; this repository
+`std::experimental::simd` (`native_simd`), without ISA intrinsics. On one AVX-512 core it is 1.6–3.4x faster than
+[gnuradio4](https://github.com/fair-acc/gnuradio4)'s `SimdFFT` in single precision (1.3–2.0x in double), and
+0.8–2.0x as fast as FFTW 3.3.10 with AVX-512 codelets, depending on the size. The paper in `paper/` explains how and reports the measurements; this repository
 contains everything needed to repeat them on another Linux host.
 
 ```
@@ -11,8 +11,10 @@ include/fastfft/fft.hpp      the implementation (one header, ~400 lines)
 bench/fftbench.cpp           benchmark + accuracy check: fastfft, gnuradio4 SimdFFT, FFTW
 bench/run.sh                 one-command reproduction on this host -> results/<host>-<date>/
 bench/analyze.py             statistics: medians, bootstrap confidence intervals, paired speedups
+bench/gr4_compare.sh         builds gnuradio4 with and without the patch, runs its tests and block benchmarks
 gr4/0001-fastfft.patch       patch for gnuradio4 (rev af62235) that uses fastfft in gr::algorithm::FFT
-paper/                       LaTeX source and PDF
+gr4/0002-bm_fft_stream.patch gnuradio4 benchmark for the streaming FFT block (used by gr4_compare.sh)
+paper/                       LaTeX source, PDF, mkdata.py (results -> tables and figure data)
 results/                     measurements, one directory per host and run
 ```
 
@@ -52,7 +54,7 @@ writes to `results/<hostname>-<date>/`:
 | `raw-<r>.csv`, `width-raw-w<B>-<r>.csv` | every timing sample: label, impl, precision, n, round, ns |
 | `summary.md`, `summary.csv`, `speedup.csv` | the statistics below |
 
-A full run takes about 5–15 minutes. Please send back the whole results directory.
+A full run took 10 minutes on the reference host. Please send back the whole results directory.
 
 For cleaner numbers: run on an otherwise idle machine, fix the CPU frequency if you can (`cpupower frequency-set -g
 performance`, disable turbo), and pick an isolated core with `--cpu N`. None of this is required, the method below
@@ -91,4 +93,19 @@ is designed to cope with ordinary noise and to show how much there was.
    per frame, and fuses magnitude, phase and the fftshift into one pass (same functions, same results, no
    temporaries; the unwrap path keeps its original order).
 
-Effect, measured with gnuradio4's own `bm_fft_block` and its unit tests, is in `results/gr4-patch.md`.
+`bench/gr4_compare.sh` reproduces the before/after comparison with gnuradio4's own benchmark facility (`bm_fft_stream`
+from 0002, and the existing `bm_fft_block`) and runs the FFT unit tests on the patched tree. Use GCC: gnuradio4's
+clang build uses libc++, where vir-simd only emulates simd, and the patch then keeps SimdFFT.
+
+## Results so far
+
+| host | kernel data | gr4 patch data |
+|---|---|---|
+| Intel Xeon VM, 4 vCPU, AVX-512, GCC 14.2 | `results/vm-20261010-1949/summary.md` | `results/vm-20261010-2000-gr4/summary.md` |
+
+## Building the paper
+
+```sh
+python3 paper/mkdata.py results/<kernel-dir> results/<gr4-dir>   # writes paper/numbers.tex, tables.tex, data/
+cd paper && pdflatex fastfft.tex && pdflatex fastfft.tex
+```

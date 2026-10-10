@@ -38,7 +38,7 @@ if [ ! -e "$W/base/.git" ]; then
 fi
 TARGETS=(bm_fft_stream bm_fft_block qa_FFT qa_algorithm_fourier)
 for v in base patch; do
-  cmake -S "$W/$v" -B "$W/$v/build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER="$CC" \
+  [ -f "$W/$v/build/build.ninja" ] || cmake -S "$W/$v" -B "$W/$v/build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER="$CC" \
         -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_CXX_FLAGS=-march=native \
         -DGR_ENABLE_HTTP=OFF -DENABLE_TESTING=ON -DENABLE_BENCHMARKS=ON -DENABLE_EXAMPLES=OFF >"$OUT/cmake-$v.log"
   echo "building $v (this takes a while)"
