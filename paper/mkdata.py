@@ -124,12 +124,15 @@ if any(r["label"] == "gcc17" for r in summ):
 fastfft on \\texttt{{<experimental/simd>}} (GCC 14 and trunk), on C++26 \\texttt{{std::simd}}, and fastfft::cx on
 \\texttt{{std::simd::vec<std::complex<{prec}>{{}}>}} (plain, and with zip/broadcast via \\texttt{{bit\\_cast}} to a real
 vector); SimdFFT built with trunk for reference.}}\\label{{tab:gcc17-{prec}}}
-\\begin{{tabular}}{{rllllll}}\\toprule
+\\begin{{tabular}}{{rrrrrrr}}\\toprule
 $N$ & exp., GCC 14 & exp., trunk & C++26 & cx & cx, bit\\_cast & SimdFFT\\\\\\midrule""")
+        def scell(*a):  # stacked: median above its CI, so seven columns fit the page
+            m, ci = cell(*a).split(" ", 1)
+            return f"\\begin{{tabular}}[t]{{@{{}}r@{{}}}}{m}\\\\{ci}\\end{{tabular}}"
         for n in NS:
-            tables.append(f"$2^{{{n.bit_length() - 1}}}$ & {cell(NATIVE, 'fastfft', prec, n)} & {cell('gcc17-exp', 'fastfft', prec, n)} & "
-                          f"{cell('gcc17', 'fastfft', prec, n)} & {cell('gcc17', 'fastfft-cx', prec, n)} & "
-                          f"{cell('gcc17-cxbc', 'fastfft-cx', prec, n)} & {cell('gcc17', 'gr4-SimdFFT', prec, n)}\\\\")
+            tables.append(f"$2^{{{n.bit_length() - 1}}}$ & {scell(NATIVE, 'fastfft', prec, n)} & {scell('gcc17-exp', 'fastfft', prec, n)} & "
+                          f"{scell('gcc17', 'fastfft', prec, n)} & {scell('gcc17', 'fastfft-cx', prec, n)} & "
+                          f"{scell('gcc17-cxbc', 'fastfft-cx', prec, n)} & {scell('gcc17', 'gr4-SimdFFT', prec, n)}\\\\")
         tables.append("\\bottomrule\\end{tabular}\\end{table}\n")
 
     def ratios(num_, den_, prec, lo=0, hi=1 << 30):
