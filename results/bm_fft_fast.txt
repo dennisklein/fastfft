@@ -1,0 +1,52 @@
+       N   frames |    maxdiff/max    err(gr)/max  err(fast)/max
+      64     1024 |      2.233e-07      1.023e-07      1.137e-07
+     256      256 |      3.602e-07      1.836e-07      1.076e-07
+    1024       64 |      3.280e-07      2.593e-07      1.049e-07
+    4096       16 |      3.308e-07      2.662e-07      1.551e-07
+   16384        4 |      3.336e-07      3.354e-07      1.641e-07
+   65536        1 |      3.844e-07      3.332e-07      1.576e-07
+  262144        1 |      3.928e-07      3.589e-07      2.037e-07
+ 1048576        1 |      4.146e-07      3.758e-07      2.194e-07
+all micro-benchmarks passed:
+┌────────────────benchmark:─────────────────┬──────┬──min───┬─total time─┬─median─┬──max───┬──mean──┬──#N──┬─stddev─┬─ops/s─┐
+│ block FFT<float>     (SimdFFT) N=     64  │ PASS │ 244 us │      53 ms │ 256 us │ 391 us │ 264 us │ 200  │  20 us │  7.5G │
+│ block FastFFT<float> (AVX-512) N=     64  │ PASS │  57 us │      13 ms │  60 us │ 139 us │  64 us │ 200  │  12 us │ 30.6G │
+│ kernel SimdFFT            N=     64       │ PASS │ 236 us │      50 ms │ 243 us │ 461 us │ 249 us │ 200  │  22 us │  7.9G │
+│ kernel fastfft            N=     64       │ PASS │  40 us │       9 ms │  43 us │ 104 us │  46 us │ 200  │   8 us │ 42.8G │
+├───────────────────────────────────────────┼──────┼────────┼────────────┼────────┼────────┼────────┼──────┼────────┼───────┤
+│ block FFT<float>     (SimdFFT) N=    256  │ PASS │ 230 us │      50 ms │ 240 us │ 381 us │ 250 us │ 200  │  25 us │ 10.5G │
+│ block FastFFT<float> (AVX-512) N=    256  │ PASS │  55 us │      13 ms │  58 us │ 227 us │  65 us │ 200  │  19 us │ 40.4G │
+│ kernel SimdFFT            N=    256       │ PASS │ 215 us │      45 ms │ 221 us │ 315 us │ 226 us │ 200  │  14 us │ 11.6G │
+│ kernel fastfft            N=    256       │ PASS │  39 us │       9 ms │  42 us │  89 us │  46 us │ 200  │   9 us │ 56.7G │
+├───────────────────────────────────────────┼──────┼────────┼────────────┼────────┼────────┼────────┼──────┼────────┼───────┤
+│ block FFT<float>     (SimdFFT) N=   1024  │ PASS │ 266 us │      58 ms │ 276 us │ 462 us │ 291 us │ 200  │  37 us │ 11.2G │
+│ block FastFFT<float> (AVX-512) N=   1024  │ PASS │  62 us │      14 ms │  65 us │ 166 us │  70 us │ 200  │  11 us │ 47.1G │
+│ kernel SimdFFT            N=   1024       │ PASS │ 249 us │      52 ms │ 254 us │ 348 us │ 261 us │ 200  │  16 us │ 12.6G │
+│ kernel fastfft            N=   1024       │ PASS │  45 us │      10 ms │  46 us │  76 us │  48 us │ 200  │   5 us │ 68.3G │
+├───────────────────────────────────────────┼──────┼────────┼────────────┼────────┼────────┼────────┼──────┼────────┼───────┤
+│ block FFT<float>     (SimdFFT) N=   4096  │ PASS │ 340 us │      73 ms │ 362 us │ 507 us │ 366 us │ 200  │  22 us │ 10.7G │
+│ block FastFFT<float> (AVX-512) N=   4096  │ PASS │  88 us │      19 ms │  93 us │ 178 us │  97 us │ 200  │  13 us │ 40.5G │
+│ kernel SimdFFT            N=   4096       │ PASS │ 324 us │      69 ms │ 340 us │ 514 us │ 345 us │ 200  │  22 us │ 11.4G │
+│ kernel fastfft            N=   4096       │ PASS │  72 us │      16 ms │  76 us │ 145 us │  81 us │ 200  │  11 us │ 48.6G │
+├───────────────────────────────────────────┼──────┼────────┼────────────┼────────┼────────┼────────┼──────┼────────┼───────┤
+│ block FFT<float>     (SimdFFT) N=  16384  │ PASS │ 394 us │      90 ms │ 427 us │ 704 us │ 451 us │ 200  │  60 us │ 10.2G │
+│ block FastFFT<float> (AVX-512) N=  16384  │ PASS │  96 us │      22 ms │ 101 us │ 240 us │ 108 us │ 200  │  16 us │ 42.6G │
+│ kernel SimdFFT            N=  16384       │ PASS │ 370 us │      79 ms │ 389 us │   1 ms │ 396 us │ 200  │  55 us │ 11.6G │
+│ kernel fastfft            N=  16384       │ PASS │  77 us │      17 ms │  79 us │ 169 us │  83 us │ 200  │  11 us │ 55.0G │
+├───────────────────────────────────────────┼──────┼────────┼────────────┼────────┼────────┼────────┼──────┼────────┼───────┤
+│ block FFT<float>     (SimdFFT) N=  65536  │ PASS │ 450 us │      98 ms │ 477 us │ 698 us │ 488 us │ 200  │  39 us │ 10.7G │
+│ block FastFFT<float> (AVX-512) N=  65536  │ PASS │ 156 us │      35 ms │ 168 us │ 317 us │ 173 us │ 200  │  20 us │ 30.3G │
+│ kernel SimdFFT            N=  65536       │ PASS │ 419 us │      92 ms │ 443 us │   3 ms │ 462 us │ 200  │ 165 us │ 11.4G │
+│ kernel fastfft            N=  65536       │ PASS │ 125 us │      28 ms │ 133 us │ 502 us │ 140 us │ 200  │  34 us │ 37.4G │
+├───────────────────────────────────────────┼──────┼────────┼────────────┼────────┼────────┼────────┼──────┼────────┼───────┤
+│ block FFT<float>     (SimdFFT) N= 262144  │ PASS │   2 ms │     554 ms │   3 ms │   4 ms │   3 ms │ 200  │ 295 us │  8.5G │
+│ block FastFFT<float> (AVX-512) N= 262144  │ PASS │   1 ms │     240 ms │   1 ms │   2 ms │   1 ms │ 200  │ 147 us │ 19.6G │
+│ kernel SimdFFT            N= 262144       │ PASS │   2 ms │     542 ms │   2 ms │  13 ms │   3 ms │ 200  │ 866 us │  8.7G │
+│ kernel fastfft            N= 262144       │ PASS │ 866 us │     193 ms │ 949 us │   2 ms │ 966 us │ 200  │ 117 us │ 24.4G │
+├───────────────────────────────────────────┼──────┼────────┼────────────┼────────┼────────┼────────┼──────┼────────┼───────┤
+│ block FFT<float>     (SimdFFT) N=1048576  │ PASS │  11 ms │       2  s │  12 ms │  19 ms │  12 ms │ 200  │   1 ms │  8.8G │
+│ block FastFFT<float> (AVX-512) N=1048576  │ PASS │   5 ms │       1  s │   6 ms │  12 ms │   6 ms │ 200  │ 897 us │ 18.0G │
+│ kernel SimdFFT            N=1048576       │ PASS │  10 ms │       2  s │  10 ms │  52 ms │  11 ms │ 200  │   3 ms │  9.6G │
+│ kernel fastfft            N=1048576       │ PASS │   5 ms │     972 ms │   5 ms │  12 ms │   5 ms │ 200  │ 599 us │ 21.6G │
+├───────────────────────────────────────────┼──────┼────────┼────────────┼────────┼────────┼────────┼──────┼────────┼───────┤
+└───────────────────────────────────────────┴──────┴────────┴────────────┴────────┴────────┴────────┴──────┴────────┴───────┘
