@@ -1,7 +1,7 @@
 // Width-generic port of FastFFT.hpp (radix-8 first stage + radix-16 Stockham) written against std(::experimental)::simd
 // via vir::stdx::native_simd,
 // the std::simd flavour gnuradio4 uses. No intrinsics: the vector width follows the target (16 floats on AVX-512,
-// 8 on AVX2, 4 on SSE/NEON). complex<float>, power-of-two N.
+// 8 on AVX2, 4 on SSE/NEON; half that for double). Simd<float>::Plan / Simd<double>::Plan, power-of-two N.
 #ifndef FASTFFT_SIMD_HPP
 #define FASTFFT_SIMD_HPP
 
@@ -31,50 +31,55 @@ namespace stdx = vir::stdx;
 
 namespace fastfft::stdsimd {
 
-#ifdef FASTFFT_SIMD_FLOATS // force a width (floats per vector), e.g. 4/8/16 to compare widths on one ISA
-using V  = stdx::simd<float, stdx::simd_abi::deduce_t<float, FASTFFT_SIMD_FLOATS>>;
-using VD = stdx::simd<double, stdx::simd_abi::deduce_t<double, FASTFFT_SIMD_FLOATS / 2>>;
+template<typename T>
+struct Simd {
+#ifdef FASTFFT_SIMD_BYTES // force a vector size in bytes, e.g. 16/32/64 to compare widths on one ISA
+using V = stdx::simd<T, stdx::simd_abi::deduce_t<T, FASTFFT_SIMD_BYTES / sizeof(T)>>;
 #else
-using V  = stdx::native_simd<float>;
-using VD = stdx::native_simd<double>;
+using V = stdx::native_simd<T>;
 #endif
 
-inline constexpr std::size_t W = V::size(); // floats per vector
-inline constexpr std::size_t C = W / 2;     // complex values per vector
+static constexpr std::size_t W = V::size(); // scalars per vector
+static constexpr std::size_t C = W / 2;     // complex values per vector
 static_assert(C >= 2 && C <= 8, "needs 2..8 complex lanes per vector");
 
-namespace detail {
+
 
 // a * b + c; spelled out (with -ffp-contract=fast this is one FMA) because stdx::fma is not inlined by libstdc++
-[[gnu::always_inline]] inline V fma(const V& a, const V& b, const V& c) { return a * b + c; }
+[[gnu::always_inline]] static V fma(const V& a, const V& b, const V& c) { return a * b + c; }
 
-[[gnu::always_inline]] inline V load(const float* p) { return V(p, stdx::element_aligned); }
-[[gnu::always_inline]] inline void store(const V& v, float* p) { v.copy_to(p, stdx::element_aligned); }
+[[gnu::always_inline]] static V load(const T* p) { return V(p, stdx::element_aligned); }
+[[gnu::always_inline]] static void store(const V& v, T* p) { v.copy_to(p, stdx::element_aligned); }
 
-[[gnu::always_inline]] inline V pm() { return V([](auto i) { return (i & 1) ? 1.f : -1.f; }); } // (-1, +1, ...)
-[[gnu::always_inline]] inline V mp() { return V([](auto i) { return (i & 1) ? -1.f : 1.f; }); } // (+1, -1, ...)
+[[gnu::always_inline]] static V pm() { return V([](auto i) { return (i & 1) ? T(1) : -T(1); }); } // (-1, +1, ...)
+[[gnu::always_inline]] static V mp() { return V([](auto i) { return (i & 1) ? -T(1) : T(1); }); } // (+1, -1, ...)
 
-typedef float VB __attribute__((vector_size(sizeof(float) * W))); // the compiler's generic vector type of the same width
+typedef T VB __attribute__((vector_size(sizeof(T) * W))); // the compiler's generic vector type of the same width
 static_assert(sizeof(VB) == sizeof(V));
 
 template<std::size_t... J>
-[[gnu::always_inline]] inline V swapImpl(const V& v, std::index_sequence<J...>) {
+[[gnu::always_inline]] static V swapImpl(const V& v, std::index_sequence<J...>) {
     const VB x = std::bit_cast<VB>(v);
     return std::bit_cast<V>(__builtin_shufflevector(x, x, int(J ^ 1U)...));
 }
-[[gnu::always_inline]] inline V swapReIm(const V& v) { return swapImpl(v, std::make_index_sequence<W>{}); }
+[[gnu::always_inline]] static V swapReIm(const V& v) { return swapImpl(v, std::make_index_sequence<W>{}); }
 
 // broadcast one 64-bit pair of floats to every complex lane
-[[gnu::always_inline]] inline V bcast2(const float* p) {
-    double d;
-    std::memcpy(&d, p, sizeof(d));
-    return std::bit_cast<V>(VD(d));
+[[gnu::always_inline]] static V bcast2(const T* p) {
+    if constexpr (sizeof(T) == 4) { // one 64-bit broadcast
+        using VD = stdx::simd<double, stdx::simd_abi::deduce_t<double, W / 2>>;
+        double d;
+        std::memcpy(&d, p, sizeof(d));
+        return std::bit_cast<V>(VD(d));
+    } else { // a generator compiles to a 128-bit broadcast here; a shufflevector of a 2-lane vector was 2x slower
+        return V([p](auto i) { return p[i & 1]; });
+    }
 }
 
 // z * w, with w given as (wr, wr) and (-wi, wi) per lane
-[[gnu::always_inline]] inline V cmul(const V& z, const V& wr, const V& wiS) { return fma(z, wr, swapReIm(z) * wiS); }
+[[gnu::always_inline]] static V cmul(const V& z, const V& wr, const V& wiS) { return fma(z, wr, swapReIm(z) * wiS); }
 
-[[gnu::always_inline]] inline void bfly4(const V& a, const V& b, const V& c, const V& d, V& y0, V& y1, V& y2, V& y3) {
+[[gnu::always_inline]] static void bfly4(const V& a, const V& b, const V& c, const V& d, V& y0, V& y1, V& y2, V& y3) {
     const V apc = a + c, amc = a - c, bpd = b + d;
     const V sw  = swapReIm(b - d);
     y0          = apc + bpd;
@@ -83,28 +88,28 @@ template<std::size_t... J>
     y3          = fma(sw, pm(), amc); // amc + j(b-d)
 }
 
-[[gnu::always_inline]] inline V negJ(const V& v) { return swapReIm(v) * mp(); }
-[[gnu::always_inline]] inline V mulW8(const V& v) {
-    constexpr float r = 0.70710678118654752f;
+[[gnu::always_inline]] static V negJ(const V& v) { return swapReIm(v) * mp(); }
+[[gnu::always_inline]] static V mulW8(const V& v) {
+    constexpr T r = T(0.70710678118654752);
     return fma(swapReIm(v), mp() * r, v * r);
 }
-[[gnu::always_inline]] inline V mulW8_3(const V& v) {
-    constexpr float r = 0.70710678118654752f;
+[[gnu::always_inline]] static V mulW8_3(const V& v) {
+    constexpr T r = T(0.70710678118654752);
     return fma(swapReIm(v), mp() * r, v * -r);
 }
 
-[[gnu::always_inline]] inline void bfly8(const V* a, V* y) {
+[[gnu::always_inline]] static void bfly8(const V* a, V* y) {
     const V b0 = a[0] + a[4], b1 = a[1] + a[5], b2 = a[2] + a[6], b3 = a[3] + a[7];
     const V c0 = a[0] - a[4], c1 = mulW8(a[1] - a[5]), c2 = negJ(a[2] - a[6]), c3 = mulW8_3(a[3] - a[7]);
     bfly4(b0, b1, b2, b3, y[0], y[2], y[4], y[6]);
     bfly4(c0, c1, c2, c3, y[1], y[3], y[5], y[7]);
 }
 
-[[gnu::always_inline]] inline V cconst(float re) { return V(re); }
-[[gnu::always_inline]] inline V cconstS(float im) { return pm() * im; }
+[[gnu::always_inline]] static V cconst(T re) { return V(re); }
+[[gnu::always_inline]] static V cconstS(T im) { return pm() * im; }
 
-[[gnu::always_inline]] inline void bfly16(const V* a, V* y) {
-    constexpr float c1 = 0.92387953251128674f, s1 = 0.38268343236508977f;
+[[gnu::always_inline]] static void bfly16(const V* a, V* y) {
+    constexpr T c1 = T(0.92387953251128674), s1 = T(0.38268343236508977);
     V               B[4][4];
     for (int j1 = 0; j1 < 4; ++j1) {
         bfly4(a[j1], a[j1 + 4], a[j1 + 8], a[j1 + 12], B[j1][0], B[j1][1], B[j1][2], B[j1][3]);
@@ -128,15 +133,15 @@ template<std::size_t... J>
 // FFT stage), so this one helper drops to the compiler's generic vector extension, the same mechanism vir's
 // simd_permute uses internally. Still no ISA intrinsics and still width-generic.
 template<bool Hi, std::size_t... J>
-[[gnu::always_inline]] inline V zipImpl(const V& a, const V& b, std::index_sequence<J...>) {
+[[gnu::always_inline]] static V zipImpl(const V& a, const V& b, std::index_sequence<J...>) {
     constexpr auto idx = [](std::size_t j) { const std::size_t jc = j / 2; return int((jc & 1) * W + 2 * (jc / 2 + (Hi ? C / 2 : 0)) + (j & 1)); };
     return std::bit_cast<V>(__builtin_shufflevector(std::bit_cast<VB>(a), std::bit_cast<VB>(b), idx(J)...));
 }
-[[gnu::always_inline]] inline V zipLo(const V& a, const V& b) { return zipImpl<false>(a, b, std::make_index_sequence<W>{}); }
-[[gnu::always_inline]] inline V zipHi(const V& a, const V& b) { return zipImpl<true>(a, b, std::make_index_sequence<W>{}); }
+[[gnu::always_inline]] static V zipLo(const V& a, const V& b) { return zipImpl<false>(a, b, std::make_index_sequence<W>{}); }
+[[gnu::always_inline]] static V zipHi(const V& a, const V& b) { return zipImpl<true>(a, b, std::make_index_sequence<W>{}); }
 
 // interleave 8 vectors s[k] (lane p) into out[8p + k] order, as 8 consecutive vectors
-[[gnu::always_inline]] inline void interleave8(const V* s, V* out) {
+[[gnu::always_inline]] static void interleave8(const V* s, V* out) {
     V r1[8], r2[8];
     // round 1: pairs (0,4) (2,6) (1,5) (3,7)
     constexpr int A[4] = {0, 2, 1, 3};
@@ -159,11 +164,10 @@ template<bool Hi, std::size_t... J>
 }
 
 struct AlignedFree {
-    void operator()(float* p) const noexcept { std::free(p); }
+    void operator()(T* p) const noexcept { std::free(p); }
 };
-inline float* allocFloats(std::size_t n) { return static_cast<float*>(std::aligned_alloc(64, ((n * sizeof(float) + 63) / 64) * 64 + 64)); }
+static T* allocFloats(std::size_t n) { return static_cast<T*>(std::aligned_alloc(64, ((n * sizeof(T) + 63) / 64) * 64 + 64)); }
 
-} // namespace detail
 
 class Plan {
 public:
@@ -180,7 +184,7 @@ public:
     void init(std::size_t N) {
         _N = N;
         _stages.clear();
-        std::vector<float> tw;
+        std::vector<T> tw;
         auto               w = [](std::size_t k, std::size_t nn) { const double a = -2.0 * std::numbers::pi * double(k) / double(nn); return std::complex<double>(std::cos(a), std::sin(a)); };
         _vector             = N >= 8 * 8 && (N / 8) % C == 0;
         if (_vector) {
@@ -194,13 +198,13 @@ public:
                         for (std::size_t k = 1; k < r; ++k) {
                             for (std::size_t j = 0; j < C; ++j) {
                                 const auto z = w(k * (C * v + j), n);
-                                tw.push_back(float(z.real()));
-                                tw.push_back(float(z.real()));
+                                tw.push_back(T(z.real()));
+                                tw.push_back(T(z.real()));
                             }
                             for (std::size_t j = 0; j < C; ++j) {
                                 const auto z = w(k * (C * v + j), n);
-                                tw.push_back(float(-z.imag()));
-                                tw.push_back(float(z.imag()));
+                                tw.push_back(T(-z.imag()));
+                                tw.push_back(T(z.imag()));
                             }
                         }
                     }
@@ -208,7 +212,7 @@ public:
                     for (std::size_t p = 0; p < m; ++p) {
                         for (std::size_t k = 1; k < r; ++k) {
                             const auto z = w(k * p, n);
-                            tw.insert(tw.end(), {float(z.real()), float(z.real()), float(-z.imag()), float(z.imag())});
+                            tw.insert(tw.end(), {T(z.real()), T(z.real()), T(-z.imag()), T(z.imag())});
                         }
                     }
                 }
@@ -217,25 +221,25 @@ public:
             }
         }
         _tw = std::move(tw);
-        _work.reset(detail::allocFloats(2 * N));
-        _inCopy.reset(detail::allocFloats(2 * N));
+        _work.reset(allocFloats(2 * N));
+        _inCopy.reset(allocFloats(2 * N));
     }
 
-    void forward(const std::complex<float>* inC, std::complex<float>* outC) const {
+    void forward(const std::complex<T>* inC, std::complex<T>* outC) const {
         if (!_vector) {
             scalarForward(inC, outC);
             return;
         }
-        const float* in  = reinterpret_cast<const float*>(inC);
-        float*       out = reinterpret_cast<float*>(outC);
+        const T* in  = reinterpret_cast<const T*>(inC);
+        T*       out = reinterpret_cast<T*>(outC);
         if (in == out) {
-            std::memcpy(_inCopy.get(), in, 2 * _N * sizeof(float));
+            std::memcpy(_inCopy.get(), in, 2 * _N * sizeof(T));
             in = _inCopy.get();
         }
         const std::size_t nS  = _stages.size();
-        const float*      src = in;
+        const T*      src = in;
         for (std::size_t i = 0; i < nS; ++i) {
-            float* dst = ((nS - 1 - i) % 2 == 0) ? out : _work.get();
+            T* dst = ((nS - 1 - i) % 2 == 0) ? out : _work.get();
             runStage(_stages[i], src, dst);
             src = dst;
         }
@@ -245,12 +249,11 @@ private:
     std::size_t                                 _N{0};
     bool                                        _vector{false};
     std::vector<Stage>                          _stages;
-    std::vector<float>                          _tw;
-    std::unique_ptr<float, detail::AlignedFree> _work, _inCopy;
+    std::vector<T>                          _tw;
+    std::unique_ptr<T, AlignedFree> _work, _inCopy;
 
-    void runStage(const Stage& st, const float* x, float* y) const {
-        using namespace detail;
-        const std::size_t m = st.m, s = st.s;
+    void runStage(const Stage& st, const T* x, T* y) const {
+                const std::size_t m = st.m, s = st.s;
         if (st.radix == 2) {
             for (std::size_t q = 0; q < s; q += C) {
                 const V a = load(x + 2 * q), b = load(x + 2 * (q + s));
@@ -271,7 +274,7 @@ private:
             return;
         }
         if (s == 1) { // radix 8, vectorised over p, interleaved on the store
-            const float* t = _tw.data() + st.tw;
+            const T* t = _tw.data() + st.tw;
             for (std::size_t p0 = 0; p0 < m; p0 += C, t += 7 * 2 * W) {
                 V a[8], o[8], r[8];
                 for (std::size_t k = 0; k < 8; ++k) {
@@ -290,9 +293,9 @@ private:
         }
         if (st.radix == 16) {
             for (std::size_t p = 0; p < m; ++p) {
-                const float* t  = _tw.data() + st.tw + 60 * p;
-                const float* xp = x + 2 * s * p;
-                float*       yp = y + 2 * s * 16 * p;
+                const T* t  = _tw.data() + st.tw + 60 * p;
+                const T* xp = x + 2 * s * p;
+                T*       yp = y + 2 * s * 16 * p;
                 for (std::size_t q = 0; q < s; q += C) {
                     V a[16], o[16];
                     for (std::size_t k = 0; k < 16; ++k) {
@@ -308,9 +311,9 @@ private:
             return;
         }
         for (std::size_t p = 0; p < m; ++p) { // radix 8
-            const float* t  = _tw.data() + st.tw + 28 * p;
-            const float* xp = x + 2 * s * p;
-            float*       yp = y + 2 * s * 8 * p;
+            const T* t  = _tw.data() + st.tw + 28 * p;
+            const T* xp = x + 2 * s * p;
+            T*       yp = y + 2 * s * 8 * p;
             for (std::size_t q = 0; q < s; q += C) {
                 V a[8], o[8];
                 for (std::size_t k = 0; k < 8; ++k) {
@@ -325,9 +328,9 @@ private:
         }
     }
 
-    void scalarForward(const std::complex<float>* in, std::complex<float>* out) const {
+    void scalarForward(const std::complex<T>* in, std::complex<T>* out) const {
         const std::size_t                N = _N;
-        std::vector<std::complex<float>> a(in, in + N), b(N);
+        std::vector<std::complex<T>> a(in, in + N), b(N);
         std::size_t                      n = N, s = 1;
         auto*                            x = a.data();
         auto*                            y = b.data();
@@ -335,7 +338,7 @@ private:
             const std::size_t m = n / 2;
             for (std::size_t p = 0; p < m; ++p) {
                 const double              ang = -2.0 * std::numbers::pi * double(p) / double(n);
-                const std::complex<float> wp(float(std::cos(ang)), float(std::sin(ang)));
+                const std::complex<T> wp(T(std::cos(ang)), T(std::sin(ang)));
                 for (std::size_t q = 0; q < s; ++q) {
                     const auto u           = x[q + s * p];
                     const auto v           = x[q + s * (p + m)];
@@ -350,6 +353,12 @@ private:
         std::copy(x, x + N, out);
     }
 };
+
+};
+
+using Plan  = Simd<float>::Plan;
+using PlanD = Simd<double>::Plan;
+inline constexpr std::size_t W = Simd<float>::W; // floats per vector
 
 } // namespace fastfft::stdsimd
 
