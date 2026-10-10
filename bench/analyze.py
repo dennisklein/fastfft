@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH, Dennis Klein
+# SPDX-License-Identifier: LGPL-3.0-or-later WITH LGPL-3.0-linking-exception
 """Summarise fftbench raw samples (python3 standard library only).
 
 usage: analyze.py RESULT_DIR   (reads every RESULT_DIR/*raw*.csv; writes summary.md, summary.csv, speedup.csv there)

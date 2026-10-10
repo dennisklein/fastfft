@@ -14,6 +14,9 @@
 # Needs: cmake >= 3.24, git, python3, a C++23 compiler with libstdc++ >= 14 (GCC >= 14, or clang with libstdc++),
 # util-linux (taskset, lscpu); for --fftw build also make and a C compiler. Default --fftw build compiles FFTW 3.3.10
 # with the SIMD codelets of this CPU, as distribution packages often lack AVX-512.
+#
+# SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH, Dennis Klein
+# SPDX-License-Identifier: LGPL-3.0-or-later WITH LGPL-3.0-linking-exception
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 FFTW=build RUNS=3 SAMPLES=40 CPU="" WIDTHS=auto LIBCXX="" TRUNK="" EXTRA=()

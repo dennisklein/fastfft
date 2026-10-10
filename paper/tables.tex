@@ -1,5 +1,5 @@
 \begin{table}[h]\centering
-\caption{Complex float: median ns per transform [95\,\% CI] and speedup of fastfft (median of paired ratios [95\,\% CI]).}\label{tab:float}
+\caption{Complex float, GCC 14.2: median ns per transform [95\,\% CI] and speedup of fastfft (median of paired ratios [95\,\% CI]).}\label{tab:float}
 \begin{tabular}{rlllll}\toprule
 $N$ & fastfft & gr4 SimdFFT & FFTW 3.3.10 & vs.\ SimdFFT & vs.\ FFTW\\\midrule
 $2^{6}$ & 35.8 {\scriptsize[34.8, 36.7]} & 117 {\scriptsize[116, 122]} & 45.6 {\scriptsize[44.9, 46.5]} & 3.32 {\scriptsize[3.28, 3.37]} & 1.27 {\scriptsize[1.25, 1.29]}\\
@@ -20,7 +20,7 @@ $2^{20}$ & 5.474\,M {\scriptsize[5.427\,M, 5.542\,M]} & 8.954\,M {\scriptsize[8.
 \bottomrule\end{tabular}\end{table}
 
 \begin{table}[h]\centering
-\caption{Complex double: median ns per transform [95\,\% CI] and speedup of fastfft (median of paired ratios [95\,\% CI]).}\label{tab:double}
+\caption{Complex double, GCC 14.2: median ns per transform [95\,\% CI] and speedup of fastfft (median of paired ratios [95\,\% CI]).}\label{tab:double}
 \begin{tabular}{rlllll}\toprule
 $N$ & fastfft & gr4 SimdFFT & FFTW 3.3.10 & vs.\ SimdFFT & vs.\ FFTW\\\midrule
 $2^{6}$ & 74.7 {\scriptsize[73.2, 76.2]} & 132 {\scriptsize[131, 135]} & 84.6 {\scriptsize[83.2, 85.4]} & 1.82 {\scriptsize[1.80, 1.83]} & 1.13 {\scriptsize[1.10, 1.15]}\\

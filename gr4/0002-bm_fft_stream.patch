@@ -14,7 +14,10 @@ new file mode 100644
 index 0000000..2bc5fc3
 --- /dev/null
 +++ b/blocks/fourier/benchmarks/bm_fft_stream.cpp
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,80 @@
++// SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH, Dennis Klein
++// SPDX-License-Identifier: LGPL-3.0-or-later WITH LGPL-3.0-linking-exception
++
 +#include <benchmark.hpp>
 +
 +#include <bit>

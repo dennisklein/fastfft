@@ -3,3 +3,4 @@ build-*/
 paper/*.aux
 paper/*.log
 paper/*.out
+__pycache__/

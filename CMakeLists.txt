@@ -9,6 +9,9 @@
 #   FFTBENCH_CX         OFF  also time the std::simd::vec<std::complex<T>> variant (GCC >= 17, -std=c++26)
 #   FFTBENCH_STD_FLAG   ""   explicit standard flag, e.g. -std=c++26 (CMake may not know C++26 for new compilers)
 #   FFTBENCH_WIDTHS     ""   extra fastfft builds with a forced vector size in bytes, e.g. "16;32" (width sweep)
+#
+# SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH, Dennis Klein
+# SPDX-License-Identifier: LGPL-3.0-or-later WITH LGPL-3.0-linking-exception
 cmake_minimum_required(VERSION 3.24)
 project(fastfft LANGUAGES CXX)
 

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH, Dennis Klein
+# SPDX-License-Identifier: LGPL-3.0-or-later WITH LGPL-3.0-linking-exception
 """Generate the paper's numbers.tex, tables.tex and data/*.dat from a results directory.
 
 usage: mkdata.py RESULTS_DIR [GR4_RESULTS_DIR]     (run bench/analyze.py on RESULTS_DIR first)
@@ -81,7 +83,7 @@ def sci(x):
 tables = []
 for prec, tab in (("float", "tab:float"), ("double", "tab:double")):
     tables.append(f"""\\begin{{table}}[h]\\centering
-\\caption{{Complex {prec}: median ns per transform [95\\,\\% CI] and speedup of fastfft (median of paired ratios [95\\,\\% CI]).}}\\label{{{tab}}}
+\\caption{{Complex {prec}, GCC 14.2: median ns per transform [95\\,\\% CI] and speedup of fastfft (median of paired ratios [95\\,\\% CI]).}}\\label{{{tab}}}
 \\begin{{tabular}}{{rlllll}}\\toprule
 $N$ & fastfft & gr4 SimdFFT & FFTW 3.3.10 & vs.\\ SimdFFT & vs.\\ FFTW\\\\\\midrule""")
     for n in NS:

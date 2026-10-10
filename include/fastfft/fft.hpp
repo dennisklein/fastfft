@@ -5,15 +5,15 @@
 // stage. Interleaved complex data, out-of-place or in-place, natural order in and out, unnormalised forward
 // transform X[k] = sum_n x[n] exp(-2 pi i n k / N).
 //
-// The only non-std::simd constructs are two shuffles via the compiler's generic vector extension
-// (__builtin_shufflevector, GCC >= 12 and clang): std::simd has no two-input shuffle, and the re/im swap is spelled
-// the same way for symmetry. No ISA intrinsics; the vector width follows the target (native_simd).
+// No ISA intrinsics; the vector width follows the target. Backend, first available wins: C++26 std::simd (-std=c++26,
+// libstdc++ from GCC >= 17; define FASTFFT_NO_STD_SIMD to skip it); libstdc++'s <experimental/simd> (GCC >= 12, or
+// clang with -stdlib=libstdc++), which lacks a two-input shuffle, so the zip and the re/im swap use the compiler's
+// generic vector extension (__builtin_shufflevector); else vir-simd (as used by gnuradio4). NOTE: on clang with
+// libc++, vir-simd falls back to an array-based implementation that is several times slower (FASTFFT_NATIVE_SIMD 0).
 //
-// Backend: libstdc++'s <experimental/simd> (GCC, or clang with -stdlib=libstdc++), else vir-simd (as used by
-// gnuradio4). NOTE: on clang, vir-simd falls back to an array-based implementation that is several times slower.
 // Compile with -ffp-contract=fast (the GNU-mode default of GCC) so that a*b+c becomes an FMA.
-//
-// SPDX-License-Identifier: LGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH, Dennis Klein
+// SPDX-License-Identifier: LGPL-3.0-or-later WITH LGPL-3.0-linking-exception
 #ifndef FASTFFT_FFT_HPP
 #define FASTFFT_FFT_HPP
 
@@ -204,7 +204,7 @@ struct Ops {
     // C++26 std::simd: permute of cat(a, b) lowers to one two-source shuffle (vpermt2ps on AVX-512).
     // std::experimental::simd has no two-input shuffle and permuting a concatenation gets lowered to element moves, so
     // there this helper drops to the compiler's generic vector extension (no ISA intrinsics, still width-generic).
-#ifdef FASTFFT_STD_SIMD // C++26: permute of the concatenation, no extension needed
+#ifdef FASTFFT_STD_SIMD // C++26: one two-source permute
     template<bool Hi>
     [[gnu::always_inline]] static V zip(const V& a, const V& b) {
         return std::simd::permute<int(W)>(std::simd::cat(a, b), [](int j) { const int jc = j / 2; return (jc & 1) * int(W) + 2 * (jc / 2 + (Hi ? int(C) / 2 : 0)) + (j & 1); });

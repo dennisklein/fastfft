@@ -9,6 +9,9 @@
 # both benchmarks --reps times, alternating base and patch, pinned to one core. Output: results/<host>-<date>-gr4/.
 # Needs what gnuradio4 needs (cmake, ninja, GCC >= 14). Use GCC: gnuradio4's clang build uses libc++, where vir-simd
 # emulates simd with arrays and the patch therefore keeps SimdFFT (clang 20 with libstdc++ 14.2 does not build gr4).
+#
+# SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH, Dennis Klein
+# SPDX-License-Identifier: LGPL-3.0-or-later WITH LGPL-3.0-linking-exception
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 REV=af6223528252b6b98503bf92623eb9054ea44c32

@@ -1,13 +1,14 @@
 # fastfft: a portable std::simd FFT, up to 3.4x faster than gnuradio4's
 
 `include/fastfft/fft.hpp` is a single-header, power-of-two, complex forward FFT (float and double) written against
-`std::experimental::simd` (`native_simd`), without ISA intrinsics. On one AVX-512 core it is 1.6–3.4x faster than
+`std::simd` (C++26, or `std::experimental::simd` before that), without ISA intrinsics. On one AVX-512 core it is 1.6–3.4x faster than
 [gnuradio4](https://github.com/fair-acc/gnuradio4)'s `SimdFFT` in single precision (1.3–2.0x in double), and
-0.8–2.0x as fast as FFTW 3.3.10 with AVX-512 codelets, depending on the size. The paper in `paper/` explains how and reports the measurements; this repository
-contains everything needed to repeat them on another Linux host.
+0.7–2.0x as fast as FFTW 3.3.10 with AVX-512 codelets, depending on size and precision. The paper in `paper/` explains
+how and reports the measurements; this repository contains everything needed to repeat them on another Linux host.
 
 ```
-include/fastfft/fft.hpp      the implementation (one header, ~400 lines)
+include/fastfft/fft.hpp      the implementation (one header, ~450 lines)
+include/fastfft/fft_cx.hpp   experimental variant on C++26 std::simd::vec<std::complex<T>> (GCC >= 17)
 bench/fftbench.cpp           benchmark + accuracy check: fastfft, gnuradio4 SimdFFT, FFTW
 bench/run.sh                 one-command reproduction on this host -> results/<host>-<date>/
 bench/analyze.py             statistics: medians, bootstrap confidence intervals, paired speedups
@@ -27,8 +28,8 @@ fastfft::FFT<float> fft(4096);           // N a power of two >= 2; precomputes t
 fft.forward(in, out);                    // const std::complex<float>* -> std::complex<float>*, in == out allowed
 ```
 
-Compile with C++20 or later, `-O3 -march=<target> -ffp-contract=fast`. The SIMD backend is libstdc++'s
-`<experimental/simd>` (GCC >= 12, or clang with `-stdlib=libstdc++`). With libc++ the header falls back to
+Compile with C++20 or later, `-O3 -march=<target> -ffp-contract=fast`. The SIMD backend is C++26 `std::simd` when
+available (see below), else libstdc++'s `<experimental/simd>` (GCC >= 12, or clang with `-stdlib=libstdc++`). With libc++ the header falls back to
 [vir-simd](https://github.com/mattkretz/vir-simd), which on clang emulates the vector types with arrays and is several
 times slower; `FASTFFT_NATIVE_SIMD` is 0 in that case. Sizes below 64 use a scalar radix-2 path. The transform is
 unnormalised, `X[k] = sum_n x[n] exp(-2 pi i n k / N)`; for an inverse, conjugate input and output and scale by 1/N.
@@ -48,12 +49,14 @@ with dnf or apt (`--no-deps` to skip):
 
 ```sh
 bench/build_gcc_trunk.sh                                   # Fedora/RHEL/Alma/Rocky or Debian/Ubuntu
-bench/run.sh --gcc-trunk build-$(hostname -s)/gcc-trunk    # adds labels cxx26 and trunk-exp to the results
+bench/run.sh --gcc-trunk build-$(hostname -s)/gcc-trunk    # adds labels gcc17, gcc17-exp and gcc17-cxbc
 ```
 
 With `-std=c++26` and `<simd>` available, the header uses `std::simd::permute`/`cat` instead of the
-`__builtin_shufflevector` helpers, i.e. no compiler extensions at all. `trunk-exp` is the same GCC with
-`-DFASTFFT_NO_STD_SIMD` (the `<experimental/simd>` path), which separates the API from the compiler.
+`__builtin_shufflevector` helpers, i.e. no compiler extensions at all. `gcc17` is that build (all implementations,
+plus `fastfft-cx` from `fft_cx.hpp`); `gcc17-exp` is the same GCC with `-DFASTFFT_NO_STD_SIMD` (the
+`<experimental/simd>` path), which separates the API from the compiler; `gcc17-cxbc` builds `fastfft-cx` with
+`-DFASTFFT_CX_EXPERIMENT_BITCAST`, a non-portable variant used only to attribute the cost of `fastfft-cx`.
 
 Requirements: Linux, cmake >= 3.24, git, python3, GCC >= 14 (or clang with libstdc++ 14; gnuradio4's headers need
 it), util-linux; for the FFTW build also make, a C compiler and curl. The script fetches gnuradio4 at the pinned
@@ -65,10 +68,10 @@ writes to `results/<hostname>-<date>/`:
 |---|---|
 | `host.txt` | date, kernel, compiler, flags, FFTW configuration, CPU governor/boost/SMT, load, `lscpu` |
 | `check_accuracy.csv` | max error / max magnitude of every implementation vs. a long-double reference DFT |
-| `raw-<r>.csv`, `width-raw-w<B>-<r>.csv` | every timing sample: label, impl, precision, n, round, ns |
+| `raw-<r>.csv`, `width-raw-w<B>-<r>.csv`, `<label>-raw-<r>.csv` | every timing sample: label, impl, precision, n, round, ns |
 | `summary.md`, `summary.csv`, `speedup.csv` | the statistics below |
 
-A full run took 10 minutes on the reference host. Please send back the whole results directory.
+A run without `--gcc-trunk` and `--libcxx` took about 10 minutes on the reference host. Please send back the whole results directory.
 
 For cleaner numbers: run on an otherwise idle machine, fix the CPU frequency if you can (`cpupower frequency-set -g
 performance`, disable turbo), and pick an isolated core with `--cpu N`. None of this is required, the method below
@@ -123,3 +126,13 @@ clang build uses libc++, where vir-simd only emulates simd, and the patch then k
 python3 paper/mkdata.py results/<kernel-dir> results/<gr4-dir>   # writes paper/numbers.tex, tables.tex, data/
 cd paper && pdflatex fastfft.tex && pdflatex fastfft.tex
 ```
+
+## Licence
+
+Copyright 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH and Dennis Klein.
+
+The code (headers, benchmark, scripts, gnuradio4 patches) is licensed under the GNU Lesser General Public License v3.0
+or later with the same static-linking exception as gnuradio4 (`LGPL-3.0-or-later WITH LGPL-3.0-linking-exception`),
+so the patch can go upstream unchanged. The paper and the measurement data in `results/` are licensed under
+CC BY 4.0. Every file carries an SPDX header or is covered by `REUSE.toml`; the licence texts are in `LICENSES/`
+(`LICENSE` is the LGPL text; it supplements the GPL v3, whose text is in `COPYING`).
