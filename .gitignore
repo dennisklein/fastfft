@@ -1,3 +1,5 @@
 gnuradio4/
 standalone/test_accuracy
 standalone/bench_vs_fftw
+standalone/test_simd
+standalone/ts_*
