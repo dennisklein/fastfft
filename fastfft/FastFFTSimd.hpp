@@ -1,4 +1,5 @@
-// Width-generic port of FastFFT.hpp (radix-8 first stage + radix-16 Stockham) written against vir::stdx::native_simd,
+// Width-generic port of FastFFT.hpp (radix-8 first stage + radix-16 Stockham) written against std(::experimental)::simd
+// via vir::stdx::native_simd,
 // the std::simd flavour gnuradio4 uses. No intrinsics: the vector width follows the target (16 floats on AVX-512,
 // 8 on AVX2, 4 on SSE/NEON). complex<float>, power-of-two N.
 #ifndef FASTFFT_SIMD_HPP
@@ -13,15 +14,23 @@
 #include <cstring>
 #include <memory>
 #include <numbers>
+#include <utility>
 #include <vector>
 
+#if defined(FASTFFT_USE_STD_EXPERIMENTAL_SIMD) // libstdc++'s implementation directly (also usable from clang)
+#include <experimental/simd>
+namespace fastfft::stdsimd {
+namespace stdx = std::experimental;
+}
+#else // vir-simd, as gnuradio4 uses: libstdc++'s implementation on GCC, vir's own fallback on clang
 #include <vir/simd.h>
-#include <vir/simd_bit.h>
-#include <vir/simd_permute.h>
+namespace fastfft::stdsimd {
+namespace stdx = vir::stdx;
+}
+#endif
 
 namespace fastfft::stdsimd {
 
-namespace stdx = vir::stdx;
 using V        = stdx::native_simd<float>;
 using VD       = stdx::native_simd<double>;
 
@@ -40,13 +49,21 @@ namespace detail {
 [[gnu::always_inline]] inline V pm() { return V([](auto i) { return (i & 1) ? 1.f : -1.f; }); } // (-1, +1, ...)
 [[gnu::always_inline]] inline V mp() { return V([](auto i) { return (i & 1) ? -1.f : 1.f; }); } // (+1, -1, ...)
 
-[[gnu::always_inline]] inline V swapReIm(const V& v) { return vir::simd_permute(v, [](unsigned i) { return i ^ 1u; }); }
+typedef float VB __attribute__((vector_size(sizeof(float) * W))); // the compiler's generic vector type of the same width
+static_assert(sizeof(VB) == sizeof(V));
+
+template<std::size_t... J>
+[[gnu::always_inline]] inline V swapImpl(const V& v, std::index_sequence<J...>) {
+    const VB x = std::bit_cast<VB>(v);
+    return std::bit_cast<V>(__builtin_shufflevector(x, x, int(J ^ 1U)...));
+}
+[[gnu::always_inline]] inline V swapReIm(const V& v) { return swapImpl(v, std::make_index_sequence<W>{}); }
 
 // broadcast one 64-bit pair of floats to every complex lane
 [[gnu::always_inline]] inline V bcast2(const float* p) {
     double d;
     std::memcpy(&d, p, sizeof(d));
-    return vir::simd_bit_cast<V>(VD(d));
+    return std::bit_cast<V>(VD(d));
 }
 
 // z * w, with w given as (wr, wr) and (-wi, wi) per lane
@@ -101,13 +118,17 @@ namespace detail {
     }
 }
 
-// complex-granular zip: lo = (a0 b0 a1 b1 ...) first half, hi = second half
-[[gnu::always_inline]] inline V zipLo(const V& a, const V& b) {
-    return vir::simd_permute<W>(stdx::concat(a, b), [](unsigned j) { const unsigned jc = j / 2; return (jc & 1) * unsigned(W) + 2 * (jc / 2) + (j & 1); });
+// complex-granular zip: lo = (a0 b0 a1 b1 ...) first half, hi = second half.
+// std::simd has no two-input shuffle; permuting `concat(a, b)` gets lowered to element moves (~3x the cost of the whole
+// FFT stage), so this one helper drops to the compiler's generic vector extension, the same mechanism vir's
+// simd_permute uses internally. Still no ISA intrinsics and still width-generic.
+template<bool Hi, std::size_t... J>
+[[gnu::always_inline]] inline V zipImpl(const V& a, const V& b, std::index_sequence<J...>) {
+    constexpr auto idx = [](std::size_t j) { const std::size_t jc = j / 2; return int((jc & 1) * W + 2 * (jc / 2 + (Hi ? C / 2 : 0)) + (j & 1)); };
+    return std::bit_cast<V>(__builtin_shufflevector(std::bit_cast<VB>(a), std::bit_cast<VB>(b), idx(J)...));
 }
-[[gnu::always_inline]] inline V zipHi(const V& a, const V& b) {
-    return vir::simd_permute<W>(stdx::concat(a, b), [](unsigned j) { const unsigned jc = j / 2; return (jc & 1) * unsigned(W) + 2 * (jc / 2 + unsigned(C) / 2) + (j & 1); });
-}
+[[gnu::always_inline]] inline V zipLo(const V& a, const V& b) { return zipImpl<false>(a, b, std::make_index_sequence<W>{}); }
+[[gnu::always_inline]] inline V zipHi(const V& a, const V& b) { return zipImpl<true>(a, b, std::make_index_sequence<W>{}); }
 
 // interleave 8 vectors s[k] (lane p) into out[8p + k] order, as 8 consecutive vectors
 [[gnu::always_inline]] inline void interleave8(const V* s, V* out) {

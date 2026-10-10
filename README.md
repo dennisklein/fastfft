@@ -63,3 +63,29 @@ FFTW_PREFIX=/path/to/fftw-avx512 scripts/build_standalone.sh   # accuracy test +
 ```
 
 `bin/bm_fft_fast` is the binary the results came from (x86-64 with AVX-512, needs libc++ 20 at runtime).
+
+## native_simd port (`fastfft/FastFFTSimd.hpp`)
+
+The same algorithm written against `native_simd<float>` (vir-simd, as gr4 uses), with no ISA intrinsics; the width
+follows the target (16 floats on AVX-512, 8 on AVX2, 4 on SSE). Two helpers (re/im swap and a two-input zip) use the
+compiler's generic vector extension (`__builtin_shufflevector`), because std::simd has no two-input shuffle and the
+`concat`+`simd_permute` route lowers to element moves that cost ~3x the whole stage. `stdx::fma` is spelled `a*b+c`
+(compile with `-ffp-contract=fast`) because libstdc++ does not inline it.
+
+ns per transform, one core (`standalone/test_simd.cpp`):
+
+| N | gcc 14 + vir (libstdc++ simd) | clang 20 + libstdc++ simd | clang 20 + vir fallback | hand-written AVX-512 |
+|---:|---:|---:|---:|---:|
+| 64 | 43 | 33 | 153 | 39–48 |
+| 1024 | 598 | 654 | 5908 | 676–737 |
+| 4096 | 4741 | 4926 | 34976 | 4567–4673 |
+| 65536 | 132294 | 133755 | 798477 | 128344–133751 |
+| 1M | 4.63M | 4.60M | 18.9M | 4.6–4.7M |
+
+With a real simd implementation the portable version matches the hand-written kernel. On clang, vir-simd skips
+`<experimental/simd>` and uses its own array-based fallback, which is 4–9x slower here. gr4's own SimdFFT shows the
+same effect (`standalone/simdfft_compiler_cmp.cpp`): 2x faster built with gcc 14 than with clang 20 + libc++
+(N=1024: 1980 vs 3832 ns; 4096: 11927 vs 20627 ns).
+
+Build: `g++-14 -std=c++23 -O3 -march=native -ffp-contract=fast -Ifastfft -I<vir-simd> standalone/test_simd.cpp`, or with
+clang: `-stdlib=libstdc++ -DFASTFFT_USE_STD_EXPERIMENTAL_SIMD` (no vir needed).
