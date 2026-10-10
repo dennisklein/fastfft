@@ -2,19 +2,21 @@
 # Reproduce the paper's measurements on this Linux host.
 #
 #   bench/run.sh [--fftw build|system|none] [--runs 3] [--samples 40] [--cpu N] [--cxx g++] [--widths "16 32"]
-#                [--libcxx clang++]
+#                [--libcxx clang++] [--gcc-trunk PREFIX]
 #
 # Builds fftbench (fastfft, gnuradio4 SimdFFT, FFTW) with -O3 -march=native, records the host configuration, runs the
 # benchmark --runs times as separate processes pinned to one core, sweeps narrower simd widths for fastfft, and writes
 # everything to results/<hostname>-<date>/ followed by the statistical summary (summary.md). --libcxx additionally
 # builds with that clang and libc++, where vir-simd emulates simd with arrays, and times fastfft and SimdFFT there.
+# --gcc-trunk (a prefix from bench/build_gcc_trunk.sh) additionally times fastfft built with that GCC twice: with
+# C++26 std::simd (label cxx26) and with <experimental/simd> (label trunk-exp), separating API from compiler.
 #
 # Needs: cmake >= 3.24, git, python3, a C++23 compiler with libstdc++ >= 14 (GCC >= 14, or clang with libstdc++),
 # util-linux (taskset, lscpu); for --fftw build also make and a C compiler. Default --fftw build compiles FFTW 3.3.10
 # with the SIMD codelets of this CPU, as distribution packages often lack AVX-512.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-FFTW=build RUNS=3 SAMPLES=40 CPU="" WIDTHS=auto LIBCXX="" EXTRA=()
+FFTW=build RUNS=3 SAMPLES=40 CPU="" WIDTHS=auto LIBCXX="" TRUNK="" EXTRA=()
 CXX=${CXX:-$(command -v g++-15 || command -v g++-14 || command -v g++)}   # gnuradio4 headers need GCC >= 14
 while [ $# -gt 0 ]; do
   case $1 in
@@ -25,8 +27,9 @@ while [ $# -gt 0 ]; do
     --cxx) CXX=$2; shift 2 ;;
     --widths) WIDTHS=$2; shift 2 ;;
     --libcxx) LIBCXX=$2; shift 2 ;;
+    --gcc-trunk) TRUNK=$(cd "$2" && pwd); shift 2 ;;
     --) shift; EXTRA=("$@"); break ;;   # passed to fftbench, e.g. -- --max-log2 16
-    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
     *) echo "unknown option $1" >&2; exit 1 ;;
   esac
 done
@@ -88,11 +91,23 @@ if [ -n "$LIBCXX" ]; then
   cmake --build "$BUILD-libcxx" -j"$(nproc)" --target fftbench >>"$OUT/cmake.log"
 fi
 
+if [ -n "$TRUNK" ]; then # fastfft only: gnuradio4's headers are not tested with C++26 / GCC trunk
+  for v in cxx26:OFF trunk-exp:ON; do
+    l=${v%%:*} noStd=${v##*:}
+    cmake -S "$ROOT" -B "$BUILD-$l" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER="$TRUNK/bin/g++" \
+          -DFFTBENCH_STD_FLAG=-std=c++26 -DFFTBENCH_SIMDFFT=OFF -DFFTBENCH_FFTW=OFF \
+          -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath,$TRUNK/lib64" \
+          -DCMAKE_CXX_FLAGS="$([ "$noStd" = ON ] && echo -DFASTFFT_NO_STD_SIMD)" >>"$OUT/cmake.log"
+    cmake --build "$BUILD-$l" -j"$(nproc)" --target fftbench >>"$OUT/cmake.log"
+  done
+fi
+
 # --- host record -------------------------------------------------------------------------------------------------
 {
   echo "date: $(date -Iseconds)"; echo "uname: $(uname -a)"
   echo "compiler: $("$CXX" --version | head -1)"; echo "cmake: $(cmake --version | head -1)"
   [ -n "$LIBCXX" ] && echo "libc++ build: $("$LIBCXX" --version | head -1)"
+  [ -n "$TRUNK" ] && echo "gcc trunk: $("$TRUNK/bin/g++" --version | head -1) $(cat "$TRUNK/gcc-commit.txt" 2>/dev/null)"
   echo "fastfft: $(git -C "$ROOT" describe --always --dirty 2>/dev/null || echo unknown)"
   [ -f "$BUILD/fftw-config.txt" ] && cat "$BUILD/fftw-config.txt"
   echo "flags: $(grep -m1 CMAKE_CXX_FLAGS_RELEASE: "$BUILD/CMakeCache.txt") -O3 -march=native -ffp-contract=fast"
@@ -123,6 +138,11 @@ for r in $(seq 1 "$RUNS"); do
     taskset -c "$CPU" "$BUILD-libcxx/fftbench" --samples "$SAMPLES" --impls fastfft,gr4-SimdFFT --precision float \
       --label libcxx --out "$OUT/libcxx-raw-$r.csv" "${EXTRA[@]}" 2>>"$OUT/run.log"
   fi
+  for l in ${TRUNK:+cxx26 trunk-exp}; do
+    echo "run $r/$RUNS: fastfft built with GCC trunk ($l)"
+    taskset -c "$CPU" "$BUILD-$l/fftbench" --samples "$SAMPLES" --impls fastfft --label "$l" --check \
+      --out "$OUT/$l-raw-$r.csv" "${EXTRA[@]}" 2>>"$OUT/run.log"
+  done
 done
 python3 "$ROOT/bench/analyze.py" "$OUT"
 echo "results in $OUT"

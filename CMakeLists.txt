@@ -10,9 +10,15 @@
 cmake_minimum_required(VERSION 3.24)
 project(fastfft LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+# FFTBENCH_STD_FLAG (e.g. -std=c++26) bypasses CMake's standard handling, for compilers newer than CMake knows
+set(FFTBENCH_STD_FLAG "" CACHE STRING "explicit language standard flag instead of C++23")
+if(FFTBENCH_STD_FLAG)
+  add_compile_options(${FFTBENCH_STD_FLAG})
+else()
+  set(CMAKE_CXX_STANDARD 23)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+  set(CMAKE_CXX_EXTENSIONS OFF)
+endif()
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()

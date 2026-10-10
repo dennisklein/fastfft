@@ -30,7 +30,14 @@
 #include <utility>
 #include <vector>
 
-#if __has_include(<experimental/simd>) && !defined(_LIBCPP_VERSION)
+#if __cplusplus > 202302L && __has_include(<simd>) && !defined(FASTFFT_NO_STD_SIMD)
+#include <simd>
+#endif
+#if !defined(FASTFFT_NO_STD_SIMD) && (defined(__glibcxx_simd) || defined(__cpp_lib_simd)) // C++26 std::simd: no compiler extensions needed
+#define FASTFFT_STD_SIMD     1
+#define FASTFFT_SIMD_BACKEND "C++26 std::simd"
+#define FASTFFT_NATIVE_SIMD  1
+#elif __has_include(<experimental/simd>) && !defined(_LIBCPP_VERSION)
 #include <experimental/simd>
 #define FASTFFT_SIMD_BACKEND "std::experimental::simd (libstdc++)"
 #define FASTFFT_NATIVE_SIMD  1 // 0: the simd types are emulated with arrays and fastfft is slow
@@ -59,6 +66,14 @@ namespace detail {
 
 template<std::floating_point T>
 struct Ops {
+#ifdef FASTFFT_STD_SIMD
+#ifdef FASTFFT_SIMD_BYTES // benchmarking aid: force the vector size in bytes (16/32/64) instead of the native one
+    static constexpr std::size_t kLanes = FASTFFT_SIMD_BYTES / sizeof(T);
+#else
+    static constexpr std::size_t kLanes = std::simd::vec<T>::size();
+#endif
+    using V = std::simd::vec<T, (kLanes < 4 ? 4 : kLanes)>; // at least two complex values per vector
+#else
 #ifdef FASTFFT_SIMD_BYTES // benchmarking aid: force the vector size in bytes (16/32/64) instead of the native one
     static constexpr std::size_t kLanes = FASTFFT_SIMD_BYTES / sizeof(T);
 #else
@@ -66,6 +81,7 @@ struct Ops {
 #endif
     // at least two complex values per vector: with 16-byte registers (SSE, NEON) double uses a pair of them
     using V = std::conditional_t<kLanes == stdx::native_simd<T>::size() && kLanes >= 4, stdx::native_simd<T>, stdx::simd<T, stdx::simd_abi::deduce_t<T, (kLanes < 4 ? 4 : kLanes)>>>;
+#endif
     static constexpr std::size_t W = V::size(); // scalars per vector
     static constexpr std::size_t C = W / 2;     // complex values per vector
     static_assert(C >= 2 && C <= 8, "fastfft needs 2..8 complex values per SIMD vector");
@@ -73,12 +89,18 @@ struct Ops {
     // a * b + c; spelled out (with -ffp-contract=fast this is one FMA) because stdx::fma is not inlined by libstdc++
     [[gnu::always_inline]] static V fma(const V& a, const V& b, const V& c) { return a * b + c; }
 
+#ifdef FASTFFT_STD_SIMD
+    [[gnu::always_inline]] static V load(const T* p) { return std::simd::unchecked_load<V>(p, W); }
+    [[gnu::always_inline]] static void store(const V& v, T* p) { std::simd::unchecked_store(v, p, W); }
+#else
     [[gnu::always_inline]] static V load(const T* p) { return V(p, stdx::element_aligned); }
     [[gnu::always_inline]] static void store(const V& v, T* p) { v.copy_to(p, stdx::element_aligned); }
+#endif
 
     [[gnu::always_inline]] static V pm() { return V([](auto i) { return (i & 1) ? T(1) : -T(1); }); } // (-1, +1, ...)
     [[gnu::always_inline]] static V mp() { return V([](auto i) { return (i & 1) ? -T(1) : T(1); }); } // (+1, -1, ...)
 
+#ifndef FASTFFT_STD_SIMD
     typedef T VB __attribute__((vector_size(sizeof(T) * W))); // the compiler's generic vector type of the same width
     // V <-> VB; a no-op for native simd types, a copy for the two-register double case of 16-byte targets
     [[gnu::always_inline]] static VB toVB(const V& v) {
@@ -103,12 +125,21 @@ struct Ops {
         const VB x = toVB(v);
         return fromVB(__builtin_shufflevector(x, x, int(J ^ 1U)...));
     }
+#endif
+#ifdef FASTFFT_STD_SIMD
+    [[gnu::always_inline]] static V swapReIm(const V& v) { return std::simd::permute(v, [](int i) { return i ^ 1; }); }
+#else
     [[gnu::always_inline]] static V swapReIm(const V& v) { return swapImpl(v, std::make_index_sequence<W>{}); }
+#endif
 
     // broadcast one 64-bit pair of floats to every complex lane
     [[gnu::always_inline]] static V bcast2(const T* p) {
         if constexpr (sizeof(T) == 4) { // one 64-bit broadcast
+#ifdef FASTFFT_STD_SIMD
+            using VD = std::simd::vec<double, W / 2>;
+#else
             using VD = stdx::simd<double, stdx::simd_abi::deduce_t<double, W / 2>>;
+#endif
             double d;
             std::memcpy(&d, p, sizeof(d));
             return std::bit_cast<V>(VD(d));
@@ -173,6 +204,14 @@ struct Ops {
     // std::simd has no two-input shuffle; permuting `concat(a, b)` gets lowered to element moves (~3x the cost of the whole
     // FFT stage), so this one helper drops to the compiler's generic vector extension, the same mechanism vir's
     // simd_permute uses internally. Still no ISA intrinsics and still width-generic.
+#ifdef FASTFFT_STD_SIMD // C++26: permute of the concatenation, no extension needed
+    template<bool Hi>
+    [[gnu::always_inline]] static V zip(const V& a, const V& b) {
+        return std::simd::permute<int(W)>(std::simd::cat(a, b), [](int j) { const int jc = j / 2; return (jc & 1) * int(W) + 2 * (jc / 2 + (Hi ? int(C) / 2 : 0)) + (j & 1); });
+    }
+    [[gnu::always_inline]] static V zipLo(const V& a, const V& b) { return zip<false>(a, b); }
+    [[gnu::always_inline]] static V zipHi(const V& a, const V& b) { return zip<true>(a, b); }
+#else
     template<bool Hi, std::size_t... J>
     [[gnu::always_inline]] static V zipImpl(const V& a, const V& b, std::index_sequence<J...>) {
         constexpr auto idx = [](std::size_t j) { const std::size_t jc = j / 2; return int((jc & 1) * W + 2 * (jc / 2 + (Hi ? C / 2 : 0)) + (j & 1)); };
@@ -180,6 +219,7 @@ struct Ops {
     }
     [[gnu::always_inline]] static V zipLo(const V& a, const V& b) { return zipImpl<false>(a, b, std::make_index_sequence<W>{}); }
     [[gnu::always_inline]] static V zipHi(const V& a, const V& b) { return zipImpl<true>(a, b, std::make_index_sequence<W>{}); }
+#endif
 
     // interleave 8 vectors s[k] (lane p) into out[8p + k] order, as 8 consecutive vectors
     [[gnu::always_inline]] static void interleave8(const V* s, V* out) {

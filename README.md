@@ -11,6 +11,7 @@ include/fastfft/fft.hpp      the implementation (one header, ~400 lines)
 bench/fftbench.cpp           benchmark + accuracy check: fastfft, gnuradio4 SimdFFT, FFTW
 bench/run.sh                 one-command reproduction on this host -> results/<host>-<date>/
 bench/analyze.py             statistics: medians, bootstrap confidence intervals, paired speedups
+bench/build_gcc_trunk.sh     builds GCC trunk (C++26 std::simd) into a local prefix, dnf or apt based distros
 bench/gr4_compare.sh         builds gnuradio4 with and without the patch, runs its tests and block benchmarks
 gr4/0001-fastfft.patch       patch for gnuradio4 (rev af62235) that uses fastfft in gr::algorithm::FFT
 gr4/0002-bm_fft_stream.patch gnuradio4 benchmark for the streaming FFT block (used by gr4_compare.sh)
@@ -40,6 +41,19 @@ bench/run.sh --fftw system         # use the distribution's libfftw3 + libfftw3f
 bench/run.sh --fftw none --runs 5  # skip FFTW, five process runs
 bench/run.sh -- --max-log2 16      # arguments after -- go to fftbench
 ```
+
+C++26 `std::simd` (GCC trunk, x86-64 only so far). No distribution packages a GCC with `<simd>` yet, so build one
+first; it goes into `build-<host>/gcc-trunk`, takes ~15 min on 4 cores and ~3 GB, and installs build dependencies
+with dnf or apt (`--no-deps` to skip):
+
+```sh
+bench/build_gcc_trunk.sh                                   # Fedora/RHEL/Alma/Rocky or Debian/Ubuntu
+bench/run.sh --gcc-trunk build-$(hostname -s)/gcc-trunk    # adds labels cxx26 and trunk-exp to the results
+```
+
+With `-std=c++26` and `<simd>` available, the header uses `std::simd::permute`/`cat` instead of the
+`__builtin_shufflevector` helpers, i.e. no compiler extensions at all. `trunk-exp` is the same GCC with
+`-DFASTFFT_NO_STD_SIMD` (the `<experimental/simd>` path), which separates the API from the compiler.
 
 Requirements: Linux, cmake >= 3.24, git, python3, GCC >= 14 (or clang with libstdc++ 14; gnuradio4's headers need
 it), util-linux; for the FFTW build also make, a C compiler and curl. The script fetches gnuradio4 at the pinned
