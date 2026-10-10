@@ -1,0 +1,29 @@
+all micro-benchmarks passed:
+┌────────────────────────benchmark:────────────────────────┬──────┬──min───┬─total time─┬─median─┬──max───┬──mean──┬──#N──┬─stddev─┬─ops/s─┐
+│ complex N=  1024 computeSpectrum+assembleDataSet         │ PASS │  32 us │       7 ms │  33 us │  92 us │  34 us │ 200  │   6 us │ 29.0k │
+│ complex N=  1024 computeSpectrum (window+FFT+mag+phase)  │ PASS │  20 us │       4 ms │  21 us │  55 us │  22 us │ 200  │   4 us │ 45.6k │
+│ complex N=  1024 assembleDataSet                         │ PASS │  10 us │       2 ms │  11 us │  42 us │  11 us │ 200  │   3 us │ 90.3k │
+│ complex N=  1024 FFT only (SimdFFT)                      │ PASS │   4 us │     828 us │   4 us │  39 us │   4 us │ 200  │   3 us │  241k │
+│ complex N=  1024 FFT only (fastfft)                      │ PASS │ 738 ns │     158 us │ 754 ns │   3 us │ 788 ns │ 200  │ 173 ns │  1.3M │
+├──────────────────────────────────────────────────────────┼──────┼────────┼────────────┼────────┼────────┼────────┼──────┼────────┼───────┤
+│ complex N=  4096 computeSpectrum+assembleDataSet         │ PASS │ 190 us │      41 ms │ 201 us │ 269 us │ 205 us │ 200  │  13 us │  4.9k │
+│ complex N=  4096 computeSpectrum (window+FFT+mag+phase)  │ PASS │ 114 us │      24 ms │ 119 us │ 150 us │ 122 us │ 200  │   8 us │  8.2k │
+│ complex N=  4096 assembleDataSet                         │ PASS │  38 us │       9 ms │  42 us │ 194 us │  45 us │ 200  │  13 us │ 22.3k │
+│ complex N=  4096 FFT only (SimdFFT)                      │ PASS │  20 us │       4 ms │  21 us │ 153 us │  22 us │ 200  │  10 us │ 45.6k │
+│ complex N=  4096 FFT only (fastfft)                      │ PASS │   4 us │     964 us │   5 us │  22 us │   5 us │ 200  │   2 us │  207k │
+├──────────────────────────────────────────────────────────┼──────┼────────┼────────────┼────────┼────────┼────────┼──────┼────────┼───────┤
+│ complex N= 65536 computeSpectrum+assembleDataSet         │ PASS │   4 ms │     835 ms │   4 ms │  11 ms │   4 ms │ 200  │ 658 us │  240  │
+│ complex N= 65536 computeSpectrum (window+FFT+mag+phase)  │ PASS │   3 ms │     583 ms │   3 ms │   5 ms │   3 ms │ 200  │ 356 us │  343  │
+│ complex N= 65536 assembleDataSet                         │ PASS │   1 ms │     238 ms │   1 ms │   2 ms │   1 ms │ 200  │ 110 us │  841  │
+│ complex N= 65536 FFT only (SimdFFT)                      │ PASS │ 425 us │     100 ms │ 464 us │   3 ms │ 500 us │ 200  │ 181 us │  2.0k │
+│ complex N= 65536 FFT only (fastfft)                      │ PASS │ 127 us │      34 ms │ 149 us │   3 ms │ 170 us │ 200  │ 182 us │  5.9k │
+├──────────────────────────────────────────────────────────┼──────┼────────┼────────────┼────────┼────────┼────────┼──────┼────────┼───────┤
+│    real N=  1024 computeSpectrum+assembleDataSet         │ PASS │  15 us │       4 ms │  16 us │ 123 us │  19 us │ 200  │  10 us │ 53.5k │
+│    real N=  1024 computeSpectrum (window+FFT+mag+phase)  │ PASS │  10 us │       2 ms │  11 us │  95 us │  12 us │ 200  │   7 us │ 84.6k │
+│    real N=  1024 assembleDataSet                         │ PASS │   4 us │       1 ms │   5 us │  67 us │   6 us │ 200  │   5 us │  181k │
+├──────────────────────────────────────────────────────────┼──────┼────────┼────────────┼────────┼────────┼────────┼──────┼────────┼───────┤
+│    real N= 65536 computeSpectrum+assembleDataSet         │ PASS │   2 ms │     375 ms │   2 ms │   3 ms │   2 ms │ 200  │ 136 us │  534  │
+│    real N= 65536 computeSpectrum (window+FFT+mag+phase)  │ PASS │   1 ms │     274 ms │   1 ms │   2 ms │   1 ms │ 200  │  61 us │  729  │
+│    real N= 65536 assembleDataSet                         │ PASS │ 396 us │      93 ms │ 423 us │   1 ms │ 464 us │ 200  │ 108 us │  2.2k │
+├──────────────────────────────────────────────────────────┼──────┼────────┼────────────┼────────┼────────┼────────┼──────┼────────┼───────┤
+└──────────────────────────────────────────────────────────┴──────┴────────┴────────────┴────────┴────────┴────────┴──────┴────────┴───────┘

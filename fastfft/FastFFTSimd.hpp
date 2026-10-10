@@ -31,8 +31,13 @@ namespace stdx = vir::stdx;
 
 namespace fastfft::stdsimd {
 
-using V        = stdx::native_simd<float>;
-using VD       = stdx::native_simd<double>;
+#ifdef FASTFFT_SIMD_FLOATS // force a width (floats per vector), e.g. 4/8/16 to compare widths on one ISA
+using V  = stdx::simd<float, stdx::simd_abi::deduce_t<float, FASTFFT_SIMD_FLOATS>>;
+using VD = stdx::simd<double, stdx::simd_abi::deduce_t<double, FASTFFT_SIMD_FLOATS / 2>>;
+#else
+using V  = stdx::native_simd<float>;
+using VD = stdx::native_simd<double>;
+#endif
 
 inline constexpr std::size_t W = V::size(); // floats per vector
 inline constexpr std::size_t C = W / 2;     // complex values per vector
