@@ -1,0 +1,94 @@
+diff --git a/blocks/fourier/benchmarks/CMakeLists.txt b/blocks/fourier/benchmarks/CMakeLists.txt
+index 4e30136..f23f909 100644
+--- a/blocks/fourier/benchmarks/CMakeLists.txt
++++ b/blocks/fourier/benchmarks/CMakeLists.txt
+@@ -13,5 +13,6 @@ endfunction()
+ 
+ add_gr_benchmark(bm_fft_block)
+ add_gr_benchmark(bm_fft_graph)
++add_gr_benchmark(bm_fft_stream)
+ target_link_libraries(bm_fft_graph PRIVATE gr-testing gnuradio-blocklib-core)
+ # FFT backend benchmark: algorithm/benchmarks/bm_FFT_backends.cpp
+diff --git a/blocks/fourier/benchmarks/bm_fft_stream.cpp b/blocks/fourier/benchmarks/bm_fft_stream.cpp
+new file mode 100644
+index 0000000..2bc5fc3
+--- /dev/null
++++ b/blocks/fourier/benchmarks/bm_fft_stream.cpp
+@@ -0,0 +1,77 @@
++#include <benchmark.hpp>
++
++#include <bit>
++#include <complex>
++#include <format>
++#include <memory>
++#include <random>
++#include <vector>
++
++#include <gnuradio-4.0/fourier/fft.hpp>
++
++// The streaming FFT block (complex -> complex, one sample out per sample in) driven through processBulk with ports
++// wired once and reused, as in bm_fft_block. Each call transforms 64 Ki samples (or one frame if fft_size is larger),
++// so the row times the block's own work per batch; ops/s is in transforms of size N per second.
++
++namespace {
++
++constexpr std::size_t kSamplesPerCall = 1UZ << 16;
++
++template<typename T>
++struct StreamHarness {
++    using C = std::complex<T>;
++    gr::PortOut<C>                 srcOut;
++    gr::PortIn<C>                  fftIn{};
++    gr::PortOut<C>                 fftOut;
++    gr::PortIn<C>                  sinkIn{};
++    gr::blocks::fft::FFT<T>        block;
++    std::vector<C>                 signal;
++
++    StreamHarness(std::size_t N, std::size_t total) : block({{"fft_size", static_cast<gr::Size_t>(N)}}), signal(total) {
++        block.init(block.progress);
++        std::mt19937                      gen(static_cast<unsigned>(N));
++        std::uniform_real_distribution<T> dist(-1, 1);
++        for (auto& z : signal) {
++            z = {dist(gen), dist(gen)};
++        }
++        boost::ut::expect(srcOut.resizeBuffer(total).has_value());
++        boost::ut::expect(fftOut.resizeBuffer(total).has_value());
++        boost::ut::expect(srcOut.connect(fftIn).has_value());
++        boost::ut::expect(fftOut.connect(sinkIn).has_value());
++    }
++
++    void run() {
++        const std::size_t total = signal.size();
++        {
++            auto w = srcOut.template tryReserve<gr::SpanReleasePolicy::ProcessAll>(total);
++            std::ranges::copy(signal, w.begin());
++            w.publish(total);
++        }
++        auto inSpan = fftIn.template get<gr::SpanReleasePolicy::ProcessAll>(total);
++        {
++            auto outSpan = fftOut.template tryReserve<gr::SpanReleasePolicy::ProcessAll>(total);
++            boost::ut::expect(gr::work::Status::OK == block.processBulk(inSpan, outSpan));
++        }
++        auto readBack = sinkIn.template get<gr::SpanReleasePolicy::ProcessAll>(total);
++        boost::ut::expect(boost::ut::eq(readBack.size(), total));
++    }
++};
++
++template<typename T>
++void benchStream() {
++    for (std::size_t N = 64UZ; N <= (1UZ << 20); N *= 4UZ) {
++        const std::size_t total = std::max(N, kSamplesPerCall);
++        auto              h     = std::make_shared<StreamHarness<T>>(N, total);
++        ::benchmark::benchmark<200>(std::format("FFT<{}> stream N={:>7}", gr::meta::type_name<T>(), N), total / N) = [h] { h->run(); };
++    }
++    ::benchmark::results::add_separator();
++}
++
++} // namespace
++
++const boost::ut::suite<"FFT stream block"> streamBenchmarks = [] {
++    benchStream<float>();
++    benchStream<double>();
++};
++
++int main() { /* not needed by the UT runner */ }
