@@ -129,7 +129,9 @@ cd paper && pdflatex fastfft.tex && pdflatex fastfft.tex
 
 ## Licence
 
-Copyright 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH and Dennis Klein.
+Copyright 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH.
+
+Authors: Dennis Klein <d.klein@gsi.de> and Claude (Anthropic).
 
 The code (headers, benchmark, scripts, gnuradio4 patches) is licensed under the GNU Lesser General Public License v3.0
 or later with the same static-linking exception as gnuradio4 (`LGPL-3.0-or-later WITH LGPL-3.0-linking-exception`),

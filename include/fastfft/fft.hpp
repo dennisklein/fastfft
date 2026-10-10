@@ -12,7 +12,7 @@
 // libc++, vir-simd falls back to an array-based implementation that is several times slower (FASTFFT_NATIVE_SIMD 0).
 //
 // Compile with -ffp-contract=fast (the GNU-mode default of GCC) so that a*b+c becomes an FMA.
-// SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH, Dennis Klein
+// SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH
 // SPDX-License-Identifier: LGPL-3.0-or-later WITH LGPL-3.0-linking-exception
 #ifndef FASTFFT_FFT_HPP
 #define FASTFFT_FFT_HPP

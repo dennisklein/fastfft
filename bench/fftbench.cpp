@@ -7,7 +7,7 @@
 // formed. A sample transforms max(N, 2^16) complex values as consecutive frames of size N (streaming, cache-warm),
 // and is reported as nanoseconds per N-point transform. Raw samples go to CSV; statistics are done by analyze.py.
 //
-// SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH, Dennis Klein
+// SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH
 // SPDX-License-Identifier: LGPL-3.0-or-later WITH LGPL-3.0-linking-exception
 #include <fastfft/fft.hpp>
 #ifdef FFTBENCH_WITH_CX

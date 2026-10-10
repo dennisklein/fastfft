@@ -11,7 +11,7 @@
 #
 # Takes ~15 min on 4 cores (no bootstrap) and ~3 GB of disk. Afterwards:  bench/run.sh --gcc-trunk <prefix>
 #
-# SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH, Dennis Klein
+# SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH
 # SPDX-License-Identifier: LGPL-3.0-or-later WITH LGPL-3.0-linking-exception
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)

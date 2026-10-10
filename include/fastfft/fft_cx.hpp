@@ -5,7 +5,7 @@
 // numbers, so complex multiplication, the +-i rotations and the twiddle tables are expressed as complex arithmetic
 // instead of re/im lane tricks. Needs GCC >= 17 (libstdc++'s <simd> with simd_complex) and -std=c++26; compile with
 // -fcx-limited-range (otherwise operator* carries the Annex G NaN/Inf recovery path) and -ffp-contract=fast.
-// SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH, Dennis Klein
+// SPDX-FileCopyrightText: 2026 GSI Helmholtz Centre for Heavy Ion Research GmbH
 // SPDX-License-Identifier: LGPL-3.0-or-later WITH LGPL-3.0-linking-exception
 #ifndef FASTFFT_FFT_CX_HPP
 #define FASTFFT_FFT_CX_HPP

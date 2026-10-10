@@ -4,10 +4,10 @@ version = 1
 
 [[annotations]]
 path = ["gr4/*.patch", ".gitignore", "README.md", "REUSE.toml"]
-SPDX-FileCopyrightText = "2026 GSI Helmholtz Centre for Heavy Ion Research GmbH, Dennis Klein"
+SPDX-FileCopyrightText = "2026 GSI Helmholtz Centre for Heavy Ion Research GmbH"
 SPDX-License-Identifier = "LGPL-3.0-or-later WITH LGPL-3.0-linking-exception"
 
 [[annotations]]
 path = ["paper/fastfft.pdf", "paper/numbers.tex", "paper/tables.tex", "paper/data/**", "results/**"]
-SPDX-FileCopyrightText = "2026 GSI Helmholtz Centre for Heavy Ion Research GmbH, Dennis Klein"
+SPDX-FileCopyrightText = "2026 GSI Helmholtz Centre for Heavy Ion Research GmbH"
 SPDX-License-Identifier = "CC-BY-4.0"
