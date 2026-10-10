@@ -201,9 +201,9 @@ struct Ops {
     }
 
     // complex-granular zip: lo = (a0 b0 a1 b1 ...) first half, hi = second half.
-    // std::simd has no two-input shuffle; permuting `concat(a, b)` gets lowered to element moves (~3x the cost of the whole
-    // FFT stage), so this one helper drops to the compiler's generic vector extension, the same mechanism vir's
-    // simd_permute uses internally. Still no ISA intrinsics and still width-generic.
+    // C++26 std::simd: permute of cat(a, b) lowers to one two-source shuffle (vpermt2ps on AVX-512).
+    // std::experimental::simd has no two-input shuffle and permuting a concatenation gets lowered to element moves, so
+    // there this helper drops to the compiler's generic vector extension (no ISA intrinsics, still width-generic).
 #ifdef FASTFFT_STD_SIMD // C++26: permute of the concatenation, no extension needed
     template<bool Hi>
     [[gnu::always_inline]] static V zip(const V& a, const V& b) {
