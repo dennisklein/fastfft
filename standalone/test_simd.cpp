@@ -4,6 +4,9 @@
 #include "FastFFT.hpp"
 #endif
 #include <chrono>
+#ifdef WITH_FFTW
+#include <fftw3.h>
+#endif
 #include <cstdio>
 #include <random>
 using cd = std::complex<double>;
@@ -32,7 +35,12 @@ int main(int argc, char**){
 #ifdef __AVX512F__
     fastfft::Plan hp(N); if(argc<=1) th=timeIt([&]{for(size_t b=0;b<B;b++) hp.forward(x+b*N,y+b*N);})/B;
 #endif
-    if (N>=64) printf("%8zu %10.0f %10.0f %8.2f | %9.1e\n",N,ts*1e9,th*1e9,th>0?ts/th:0.0,e);
+    double tf = 0;
+#ifdef WITH_FFTW
+    { fftwf_plan fp=fftwf_plan_dft_1d(int(N),(fftwf_complex*)x,(fftwf_complex*)y,FFTW_FORWARD,FFTW_MEASURE); for(size_t i=0;i<total;i++) x[i]={d(g),d(g)};
+      if(argc<=1) tf=timeIt([&]{for(size_t b=0;b<B;b++) fftwf_execute_dft(fp,(fftwf_complex*)(x+b*N),(fftwf_complex*)(y+b*N));})/B; fftwf_destroy_plan(fp); }
+#endif
+    if (N>=64) printf("%8zu %10.0f %10.0f %8.2f | %9.1e | fftw %10.0f\n",N,ts*1e9,th*1e9,th>0?ts/th:0.0,e,tf*1e9);
     free(x); free(y);
   }
   printf("worst=%.2e %s\n",worst,worst<1e-6?"OK":"FAIL");
