@@ -1,5 +1,17 @@
 # fastfft: a portable std::simd FFT for gnuradio4
 
+> **About this repository.** This project started as an experiment: how far Claude Code can carry a focused
+> performance-engineering task, from benchmarking an existing component to a measured and documented alternative, with
+> a human steering and reviewing. The paper in `paper/` is part of the same experiment. It shows what kind of
+> publication an AI produces when a human spends only a few hours of their own time on it. Please read both in that
+> spirit. This is not meant as state-of-the-art FFT work, and the authors claim no particular expertise in FFT
+> algorithms. The results are careful measurements on two machines, but they have not been checked exhaustively
+> against the literature. The code, the measurements and most of the text came out of a single Claude Code session
+> spanning about 15 hours, including measurement runs. It used one Claude model and no other AI tools, and took about
+> 480 model requests, 0.4 million output tokens and 104 million input tokens, 99 % of them cached re-reads of the
+> growing conversation. Dennis Klein posed the question, steered the work, reviewed the results and ran the
+> measurements on the second host.
+
 `include/fastfft/fft.hpp` is a single-header, power-of-two, complex forward FFT (float and double) written against
 `std::simd` (C++26, or `std::experimental::simd` before that), without ISA intrinsics. On one AVX-512 core it is 1.6–3.4x faster than
 [gnuradio4](https://github.com/fair-acc/gnuradio4)'s `SimdFFT` in single precision (1.3–2.0x in double), and
