@@ -3,13 +3,21 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later WITH LGPL-3.0-linking-exception
 """Generate the paper's numbers.tex, tables.tex and data/*.dat from a results directory.
 
-usage: mkdata.py RESULTS_DIR [GR4_RESULTS_DIR]     (run bench/analyze.py on RESULTS_DIR first)
+usage: mkdata.py RESULTS_DIR [GR4_RESULTS_DIR] [--host2 RESULTS_DIR2]   (run bench/analyze.py on the results first)
+
+--host2 adds a second host (macros \\Two..., appendix tables tab:two-float/-double); it needs the gcc17 labels.
 """
 import csv, os, re, sys
 
 here = os.path.dirname(os.path.abspath(__file__))
-res = sys.argv[1]
-gr4 = sys.argv[2] if len(sys.argv) > 2 else None
+argv = sys.argv[1:]
+host2 = None
+if "--host2" in argv:
+    i = argv.index("--host2")
+    host2 = argv[i + 1]
+    del argv[i:i + 2]
+res = argv[0]
+gr4 = argv[1] if len(argv) > 1 else None
 os.makedirs(os.path.join(here, "data"), exist_ok=True)
 
 summ = list(csv.DictReader(open(os.path.join(res, "summary.csv"))))
@@ -225,6 +233,60 @@ speedup as median of paired per-run ratios [95\\,\\% CI].}\\label{tab:gr4}
     for k, v in st.items():
         if v:
             num[f"GrStream{k.capitalize()}"] = f"{min(v):.1f}--{max(v):.1f}$\\times$"
+
+if host2:
+    summ2 = list(csv.DictReader(open(os.path.join(host2, "summary.csv"))))
+    T2 = {(r["label"], r["impl"], r["precision"], int(r["n"])): r for r in summ2}
+    S2 = {(r["label"], r["baseline"], r["precision"], int(r["n"])): r for r in csv.DictReader(open(os.path.join(host2, "speedup.csv")))}
+    h2 = open(os.path.join(host2, "host.txt")).read()
+    N2 = "w64" if any(r["label"] == "w64" for r in summ2) else sorted({r["label"] for r in summ2 if r["label"].startswith("w")})[-1]
+
+    def stack(m, ci):
+        return "\\begin{tabular}[t]{@{}r@{}}" + m + "\\\\{\\scriptsize" + ci + "}\\end{tabular}"
+
+    def c2(label, impl, prec, n):
+        r = T2.get((label, impl, prec, n))
+        return stack(ns(r["median_ns"]), f"[{ns(r['ci_lo'])}, {ns(r['ci_hi'])}]") if r else "--"
+
+    def s2(label, base, prec, n):
+        r = S2.get((label, base, prec, n))
+        return stack(f"{float(r['speedup']):.2f}", f"[{float(r['ci_lo']):.2f}, {float(r['ci_hi']):.2f}]") if r else "--"
+
+    def m2(l, i, p, n):
+        r = T2.get((l, i, p, n))
+        return float(r["median_ns"]) if r else None
+
+    def r2(num_, den_, prec, lo=0, hi=1 << 30, digits=2):
+        v = [m2(*num_, prec, n) / m2(*den_, prec, n) for n in NS if lo <= n <= hi and m2(*num_, prec, n) and m2(*den_, prec, n)]
+        return f"{min(v):.{digits}f}--{max(v):.{digits}f}"
+
+    def h2field(key):
+        m = re.search(rf"^\s*{key}:\s*(.+)$", h2, re.M)
+        return m.group(1).strip() if m else "?"
+
+    cpu2 = re.sub(r"\s*w/.*", "", h2field("Model name"))
+    cc2 = re.sub(r"\s*\(.*?\)", "", h2field("compiler")).replace("g++ ", "GCC ").split(" 20")[0]
+    for prec, P in (("float", "Float"), ("double", "Double")):
+        tables.append(f"""\\begin{{table}}[h]\\centering
+\\caption{{Second host, {cpu2} (one core, {cc2}), complex {prec}: median ns per transform [95\\,\\% CI], speedups of fastfft
+(paired), and the GCC trunk builds (\\texttt{{-std=c++26}}): fastfft on C++26 \\texttt{{std::simd}}, on
+\\texttt{{<experimental/simd>}}, and fastfft::cx.}}\\label{{tab:two-{prec}}}
+\\setlength\\tabcolsep{{3.5pt}}\\begin{{tabular}}{{rrrrrrrrr}}\\toprule
+$N$ & fastfft & SimdFFT & FFTW & vs.\\ SimdFFT & vs.\\ FFTW & C++26 & exp., trunk & cx\\\\\\midrule""")
+        for n in NS:
+            tables.append(f"$2^{{{n.bit_length() - 1}}}$ & {c2(N2, 'fastfft', prec, n)} & {c2(N2, 'gr4-SimdFFT', prec, n)} & {c2(N2, 'fftw', prec, n)} & "
+                          f"{s2(N2, 'gr4-SimdFFT', prec, n)} & {s2(N2, 'fftw', prec, n)} & {c2('gcc17', 'fastfft', prec, n)} & "
+                          f"{c2('gcc17-exp', 'fastfft', prec, n)} & {c2('gcc17', 'fastfft-cx', prec, n)}\\\\")
+        tables.append("\\bottomrule\\end{tabular}\\end{table}\n")
+        sv = lambda base: [float(S2[(N2, base, prec, n)]["speedup"]) for n in NS if (N2, base, prec, n) in S2]
+        num[f"Two{P}VsGr"] = f"{min(sv('gr4-SimdFFT')):.1f}--{max(sv('gr4-SimdFFT')):.1f}$\\times$"
+        num[f"Two{P}VsFftw"] = f"{min(sv('fftw')):.2f}--{max(sv('fftw')):.2f}$\\times$"
+        num[f"Two{P}Cxx"] = r2(("gcc17", "fastfft"), ("gcc17-exp", "fastfft"), prec, hi=1 << 14)
+        num[f"Two{P}CxSmall"] = r2(("gcc17", "fastfft-cx"), ("gcc17", "fastfft"), prec, hi=1 << 14)
+        num[f"Two{P}CxLarge"] = r2(("gcc17", "fastfft-cx"), ("gcc17", "fastfft"), prec, lo=1 << 19)
+    num["TwoCPU"] = cpu2
+    num["TwoCompiler"] = cc2
+    num["TwoMAD"] = f"{max(float(r['rel_mad']) for r in summ2) * 100:.1f}\\,\\%"
 
 with open(os.path.join(here, "numbers.tex"), "w") as f:
     for k, v in sorted(num.items()):

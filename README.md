@@ -119,11 +119,12 @@ clang build uses libc++, where vir-simd only emulates simd, and the patch then k
 | host | kernel data | gr4 patch data |
 |---|---|---|
 | Intel Xeon VM, 4 vCPU, AVX-512, GCC 14.2 + GCC trunk (C++26) | `results/vm-20261010-2129/summary.md` | `results/vm-20261010-2000-gr4/summary.md` |
+| AMD Ryzen AI 9 HX 370 (Zen 5), AVX-512, GCC 16.2 + GCC trunk (C++26) | `results/zeta-20261011-0058/summary.md` | |
 
 ## Building the paper
 
 ```sh
-python3 paper/mkdata.py results/<kernel-dir> results/<gr4-dir>   # writes paper/numbers.tex, tables.tex, data/
+python3 paper/mkdata.py results/<kernel-dir> results/<gr4-dir> --host2 results/<second-host-dir>   # writes paper/numbers.tex, tables.tex, data/
 cd paper && pdflatex fastfft.tex && pdflatex fastfft.tex
 ```
 
