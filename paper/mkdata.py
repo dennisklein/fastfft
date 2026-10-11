@@ -329,6 +329,12 @@ $N$ & fastfft & SimdFFT & FFTW & vs.\\ SimdFFT & vs.\\ FFTW & C++26 & exp., trun
         num[f"Two{P}Cxx"] = r2(("gcc17", "fastfft"), ("gcc17-exp", "fastfft"), prec, hi=1 << 14)
         num[f"Two{P}CxSmall"] = r2(("gcc17", "fastfft-cx"), ("gcc17", "fastfft"), prec, hi=1 << 14)
         num[f"Two{P}CxLarge"] = r2(("gcc17", "fastfft-cx"), ("gcc17", "fastfft"), prec, lo=1 << 19)
+    # both hosts together, for the abstract
+    for prec, P in (("float", "Float"), ("double", "Double")):
+        for base, tag, d in (("gr4-SimdFFT", "Gr", 1), ("fftw", "Fftw", 1)):
+            v = [float(S[(NATIVE, base, prec, n)]["speedup"]) for n in NS if (NATIVE, base, prec, n) in S]
+            v += [float(S2[(N2, base, prec, n)]["speedup"]) for n in NS if (N2, base, prec, n) in S2]
+            num[f"Both{P}Vs{tag}"] = f"{min(v):.{d}f}--{max(v):.{d}f}$\\times$"
     num["TwoCPU"] = cpu2
     num["TwoCompiler"] = cc2
     num["TwoMAD"] = f"{max(float(r['rel_mad']) for r in summ2) * 100:.1f}\\,\\%"
