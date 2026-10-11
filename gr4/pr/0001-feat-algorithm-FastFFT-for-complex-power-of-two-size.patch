@@ -1,0 +1,661 @@
+From edf0af51c5cd53b3c3c611e21ec57b0852f34b73 Mon Sep 17 00:00:00 2001
+From: Dennis Klein <d.klein@gsi.de>
+Date: Sun, 11 Oct 2026 17:12:43 +0000
+Subject: [PATCH] feat(algorithm): FastFFT for complex power-of-two sizes
+
+`gr::algorithm::FFT` routes complex, power-of-two transforms with N >= 64 to `FastFFT` when std::simd is native (libstdc++ via vir-simd), and keeps SimdFFT for everything else (real transforms, other sizes, and Clang and Emscripten builds, where vir-simd falls back to arrays).
+
+```cpp
+gr::algorithm::FFT<std::complex<float>> fft;          // FastFFT by default
+fft.compute(signal, spectrum);
+fft.useFastFFT = false;                                // back to SimdFFT
+
+gr::algorithm::FastFFT<float> plan;                    // or directly
+plan.resize(4096UZ);
+plan.forward(signal, spectrum);                        // in == out allowed
+```
+
+`FastFFT` is a Stockham autosort FFT on `vir::stdx::native_simd`: a radix-8 first pass vectorised over butterflies and transposed in registers, radix-16 middle passes with broadcast twiddles, one twiddle-free radix-2/4/8/16 final pass.
+The only non-std::simd construct is `__builtin_shufflevector` (GCC and Clang) for the two-input shuffles that std::simd lacks; no ISA intrinsics.
+Design, method and cross-host measurements (including FFTW): https://github.com/dennisklein/fft
+
+`bm_FFT_backends`, complex float, single transform, median, GCC trunk `-O2 -march=native`, one pinned core of a Xeon VM with AVX-512:
+
+| N      | SimdFFT | FastFFT | SyclFFT:CPU |
+| -----: | ------: | ------: | ----------: |
+| 1024   | 3 us    | 2 us    | 2 us        |
+| 4096   | 18 us   | 10 us   | 12 us       |
+| 16384  | 81 us   | 38 us   | 56 us       |
+| 65536  | 390 us  | 204 us  | 313 us      |
+
+### Changes
+
+- `FastFFT.hpp`: `FastFFT<T>` (float, double) and its SIMD kernel
+- `fft.hpp`: dispatch to `FastFFT` behind `useFastFFT` (default on), compiled out where std::simd is emulated
+- `qa_FastFFT`: against a direct DFT for N = 64..4096, impulse and tone with analytic spectra up to N = 2^18, in place vs out of place, `FFT` with `useFastFFT` on vs off
+- `bm_FFT_backends`: a FastFFT row next to SimdFFT
+---
+ algorithm/benchmarks/bm_FFT_backends.cpp      |  38 +-
+ .../algorithm/fourier/FastFFT.hpp             | 351 ++++++++++++++++++
+ .../gnuradio-4.0/algorithm/fourier/fft.hpp    |  13 +
+ algorithm/test/CMakeLists.txt                 |   2 +
+ algorithm/test/qa_FastFFT.cpp                 | 132 +++++++
+ 5 files changed, 522 insertions(+), 14 deletions(-)
+ create mode 100644 algorithm/include/gnuradio-4.0/algorithm/fourier/FastFFT.hpp
+ create mode 100644 algorithm/test/qa_FastFFT.cpp
+
+diff --git a/algorithm/benchmarks/bm_FFT_backends.cpp b/algorithm/benchmarks/bm_FFT_backends.cpp
+index 7494c03..353cf77 100644
+--- a/algorithm/benchmarks/bm_FFT_backends.cpp
++++ b/algorithm/benchmarks/bm_FFT_backends.cpp
+@@ -42,6 +42,9 @@ void runFftBackendBenchmarks() {
+ 
+     std::println("Backends:");
+     std::println("  SimdFFT (CPU, reference)");
++    if (gr::algorithm::kFastFFTHasNativeSimd) {
++        std::println("  FastFFT (CPU)");
++    }
+     for (const auto& b : backends) {
+         std::println("  {}", b.shortName);
+     }
+@@ -53,23 +56,30 @@ void runFftBackendBenchmarks() {
+             ::benchmark::results::add_separator();
+         }
+ 
+-        // SimdFFT is always available and is the reference baseline
+-        for (std::size_t N : kSizes) {
+-            auto batchInput = std::make_shared<std::vector<C>>(N * nBatches);
+-            for (std::size_t b = 0; b < nBatches; ++b) {
+-                auto tone = generateTone(N, (nBatches == 1) ? 5 : b % 32 + 1);
+-                std::ranges::copy(tone, batchInput->begin() + static_cast<std::ptrdiff_t>(b * N));
++        // SimdFFT is always available and is the reference baseline; FastFFT takes over complex power-of-two sizes where std::simd is native
++        for (const bool useFastFFT : {false, true}) {
++            if (useFastFFT && !gr::algorithm::kFastFFTHasNativeSimd) {
++                continue;
+             }
+-            auto cpuFft = std::make_shared<gr::algorithm::FFT<C, C>>();
+-            auto output = std::make_shared<std::vector<C>>(N);
+-            cpuFft->compute(std::span<const C>(batchInput->data(), N), *output);
+-
+-            ::benchmark::benchmark<10>(std::format("x{:<3}| {:<30} | N={:>5}", nBatches, "SimdFFT", N), fftFlops(N, nBatches)) = [batchInput, cpuFft, output, N, nBatches] {
++            const std::string_view cpuName = useFastFFT ? "FastFFT" : "SimdFFT";
++            for (std::size_t N : kSizes) {
++                auto batchInput = std::make_shared<std::vector<C>>(N * nBatches);
+                 for (std::size_t b = 0; b < nBatches; ++b) {
+-                    cpuFft->compute(std::span<const C>(batchInput->data() + b * N, N), *output);
++                    auto tone = generateTone(N, (nBatches == 1) ? 5 : b % 32 + 1);
++                    std::ranges::copy(tone, batchInput->begin() + static_cast<std::ptrdiff_t>(b * N));
+                 }
+-                return (*output)[0];
+-            };
++                auto cpuFft        = std::make_shared<gr::algorithm::FFT<C, C>>();
++                cpuFft->useFastFFT = useFastFFT;
++                auto output        = std::make_shared<std::vector<C>>(N);
++                cpuFft->compute(std::span<const C>(batchInput->data(), N), *output);
++
++                ::benchmark::benchmark<10>(std::format("x{:<3}| {:<30} | N={:>5}", nBatches, cpuName, N), fftFlops(N, nBatches)) = [batchInput, cpuFft, output, N, nBatches] {
++                    for (std::size_t b = 0; b < nBatches; ++b) {
++                        cpuFft->compute(std::span<const C>(batchInput->data() + b * N, N), *output);
++                    }
++                    return (*output)[0];
++                };
++            }
+         }
+ 
+         // device backends are discovered at runtime
+diff --git a/algorithm/include/gnuradio-4.0/algorithm/fourier/FastFFT.hpp b/algorithm/include/gnuradio-4.0/algorithm/fourier/FastFFT.hpp
+new file mode 100644
+index 0000000..27d9825
+--- /dev/null
++++ b/algorithm/include/gnuradio-4.0/algorithm/fourier/FastFFT.hpp
+@@ -0,0 +1,351 @@
++#ifndef GNURADIO_ALGORITHM_FASTFFT_HPP
++#define GNURADIO_ALGORITHM_FASTFFT_HPP
++
++#include <algorithm>
++#include <array>
++#include <bit>
++#include <cassert>
++#include <cmath>
++#include <complex>
++#include <concepts>
++#include <cstddef>
++#include <cstring>
++#include <numbers>
++#include <span>
++#include <type_traits>
++#include <utility>
++#include <vector>
++
++#include <gnuradio-4.0/MemoryAllocators.hpp>
++
++#include <vir/simd.h>
++
++namespace gr::algorithm {
++
++#ifdef VIR_HAVE_STD_SIMD
++inline constexpr bool kFastFFTHasNativeSimd = true;
++#else
++inline constexpr bool kFastFFTHasNativeSimd = false; // vir's array-based fallback (libc++, Emscripten) is slower than SimdFFT
++#endif
++
++namespace detail {
++
++#if defined(__GNUC__) && !defined(__clang__)
++#pragma GCC diagnostic push
++#pragma GCC diagnostic ignored "-Wpsabi" // the kernel is always inlined, so the vector-argument ABI note does not apply
++#endif
++
++template<std::floating_point T>
++struct FastFFTKernel {
++    static constexpr std::size_t kNativeLanes = vir::stdx::native_simd<T>::size();
++    // at least two complex values per vector: on 16-byte targets (SSE, NEON) double uses a pair of registers
++    using V                        = std::conditional_t<kNativeLanes >= 4UZ, vir::stdx::native_simd<T>, vir::stdx::simd<T, vir::stdx::simd_abi::deduce_t<T, 4UZ>>>;
++    static constexpr std::size_t W = V::size();
++    static constexpr std::size_t C = W / 2UZ;
++    static_assert(C >= 2UZ && C <= 8UZ);
++
++    static constexpr T kInvSqrt2 = T(1) / std::numbers::sqrt2_v<T>;
++    static constexpr T kCosPi8   = T(0.92387953251128675613);
++    static constexpr T kSinPi8   = T(0.38268343236508977173);
++
++    // std::simd has no two-input shuffle and vir::simd_permute of a concat lowers to element moves (~3x the whole stage),
++    // so the shuffles use the compiler's generic vector type of the same width: no ISA intrinsics, still width-generic
++    typedef T GenericVector __attribute__((vector_size(sizeof(T) * W)));
++
++    [[gnu::always_inline]] static GenericVector toGeneric(const V& v) {
++        if constexpr (std::is_trivially_copyable_v<V> && sizeof(V) == sizeof(GenericVector)) {
++            return std::bit_cast<GenericVector>(v);
++        } else {
++            GenericVector r;
++            v.copy_to(reinterpret_cast<T*>(&r), vir::stdx::element_aligned);
++            return r;
++        }
++    }
++
++    [[gnu::always_inline]] static V fromGeneric(const GenericVector& g) {
++        if constexpr (std::is_trivially_copyable_v<V> && sizeof(V) == sizeof(GenericVector)) {
++            return std::bit_cast<V>(g);
++        } else {
++            return V(reinterpret_cast<const T*>(&g), vir::stdx::element_aligned);
++        }
++    }
++
++    [[gnu::always_inline]] static V    load(const T* p) { return V(p, vir::stdx::element_aligned); }
++    [[gnu::always_inline]] static void store(const V& v, T* p) { v.copy_to(p, vir::stdx::element_aligned); }
++
++    [[gnu::always_inline]] static V minusPlus() {
++        return V([](auto i) { return (i & 1) ? T(1) : -T(1); });
++    }
++    [[gnu::always_inline]] static V plusMinus() {
++        return V([](auto i) { return (i & 1) ? -T(1) : T(1); });
++    }
++
++    template<std::size_t... J>
++    [[gnu::always_inline]] static V swapRealImag(const V& v, std::index_sequence<J...>) {
++        const GenericVector g = toGeneric(v);
++        return fromGeneric(__builtin_shufflevector(g, g, int(J ^ 1UZ)...));
++    }
++    [[gnu::always_inline]] static V swapRealImag(const V& v) { return swapRealImag(v, std::make_index_sequence<W>{}); }
++
++    [[gnu::always_inline]] static V broadcastComplex(const T* p) {
++        if constexpr (sizeof(T) == 4UZ) { // one 64-bit broadcast
++            using VDouble = vir::stdx::simd<double, vir::stdx::simd_abi::deduce_t<double, W / 2UZ>>;
++            double pair;
++            std::memcpy(&pair, p, sizeof(pair));
++            return std::bit_cast<V>(VDouble(pair));
++        } else { // the generator compiles to a 128-bit broadcast; a shuffle of a two-lane vector measured 2x slower
++            return V([p](auto i) { return p[i & 1]; });
++        }
++    }
++
++    // a * b + c is spelled out because vir::stdx::fma is not inlined by libstdc++; -ffp-contract fuses it
++    [[gnu::always_inline]] static V complexMultiply(const V& z, const V& realPair, const V& imagSigned) { return z * realPair + swapRealImag(z) * imagSigned; }
++
++    [[gnu::always_inline]] static V multiplyMinusJ(const V& v) { return swapRealImag(v) * plusMinus(); }
++    [[gnu::always_inline]] static V multiplyW8(const V& v) { return swapRealImag(v) * (plusMinus() * kInvSqrt2) + v * kInvSqrt2; }
++    [[gnu::always_inline]] static V multiplyW8Cubed(const V& v) { return swapRealImag(v) * (plusMinus() * kInvSqrt2) + v * -kInvSqrt2; }
++
++    [[gnu::always_inline]] static void butterfly4(const V& a, const V& b, const V& c, const V& d, V& y0, V& y1, V& y2, V& y3) {
++        const V apc     = a + c;
++        const V amc     = a - c;
++        const V bpd     = b + d;
++        const V bmdSwap = swapRealImag(b - d);
++        y0              = apc + bpd;
++        y2              = apc - bpd;
++        y1              = bmdSwap * plusMinus() + amc;
++        y3              = bmdSwap * minusPlus() + amc;
++    }
++
++    [[gnu::always_inline]] static void butterfly8(const V* a, V* y) {
++        const V b0 = a[0] + a[4];
++        const V b1 = a[1] + a[5];
++        const V b2 = a[2] + a[6];
++        const V b3 = a[3] + a[7];
++        const V c0 = a[0] - a[4];
++        const V c1 = multiplyW8(a[1] - a[5]);
++        const V c2 = multiplyMinusJ(a[2] - a[6]);
++        const V c3 = multiplyW8Cubed(a[3] - a[7]);
++        butterfly4(b0, b1, b2, b3, y[0], y[2], y[4], y[6]);
++        butterfly4(c0, c1, c2, c3, y[1], y[3], y[5], y[7]);
++    }
++
++    [[gnu::always_inline]] static void butterfly16(const V* a, V* y) {
++        V b[4][4];
++        for (std::size_t j = 0UZ; j < 4UZ; ++j) {
++            butterfly4(a[j], a[j + 4], a[j + 8], a[j + 12], b[j][0], b[j][1], b[j][2], b[j][3]);
++        }
++        b[1][1] = complexMultiply(b[1][1], V(kCosPi8), minusPlus() * -kSinPi8); // W16^1
++        b[1][2] = multiplyW8(b[1][2]);
++        b[1][3] = complexMultiply(b[1][3], V(kSinPi8), minusPlus() * -kCosPi8); // W16^3
++        b[2][1] = multiplyW8(b[2][1]);
++        b[2][2] = multiplyMinusJ(b[2][2]);
++        b[2][3] = multiplyW8Cubed(b[2][3]);
++        b[3][1] = complexMultiply(b[3][1], V(kSinPi8), minusPlus() * -kCosPi8); // W16^3
++        b[3][2] = multiplyW8Cubed(b[3][2]);
++        b[3][3] = complexMultiply(b[3][3], V(-kCosPi8), minusPlus() * kSinPi8); // W16^9
++        for (std::size_t k = 0UZ; k < 4UZ; ++k) {
++            butterfly4(b[0][k], b[1][k], b[2][k], b[3][k], y[k], y[k + 4], y[k + 8], y[k + 12]);
++        }
++    }
++
++    template<bool high, std::size_t... J>
++    [[gnu::always_inline]] static V interleaveComplex(const V& a, const V& b, std::index_sequence<J...>) {
++        constexpr auto sourceLane = [](std::size_t j) {
++            const std::size_t complexIndex = j / 2UZ;
++            return int((complexIndex & 1UZ) * W + 2UZ * (complexIndex / 2UZ + (high ? C / 2UZ : 0UZ)) + (j & 1UZ));
++        };
++        return fromGeneric(__builtin_shufflevector(toGeneric(a), toGeneric(b), sourceLane(J)...));
++    }
++    [[gnu::always_inline]] static V interleaveLow(const V& a, const V& b) { return interleaveComplex<false>(a, b, std::make_index_sequence<W>{}); }
++    [[gnu::always_inline]] static V interleaveHigh(const V& a, const V& b) { return interleaveComplex<true>(a, b, std::make_index_sequence<W>{}); }
++
++    // out holds the complex values of s[k] lane p at position 8p + k: three rounds of pairwise interleaving
++    [[gnu::always_inline]] static void transpose8(const V* s, V* out) {
++        V                              round1[8];
++        V                              round2[8];
++        constexpr std::array<int, 4UZ> kPairs = {0, 2, 1, 3};
++        for (std::size_t i = 0UZ; i < 4UZ; ++i) {
++            round1[2 * i]     = interleaveLow(s[kPairs[i]], s[kPairs[i] + 4]);
++            round1[2 * i + 1] = interleaveHigh(s[kPairs[i]], s[kPairs[i] + 4]);
++        }
++        for (std::size_t h = 0UZ; h < 2UZ; ++h) {
++            for (std::size_t i = 0UZ; i < 2UZ; ++i) {
++                round2[4 * h + 2 * i]     = interleaveLow(round1[4 * h + i], round1[4 * h + 2 + i]);
++                round2[4 * h + 2 * i + 1] = interleaveHigh(round1[4 * h + i], round1[4 * h + 2 + i]);
++            }
++        }
++        for (std::size_t i = 0UZ; i < 4UZ; ++i) {
++            out[2 * i]     = interleaveLow(round2[i], round2[4 + i]);
++            out[2 * i + 1] = interleaveHigh(round2[i], round2[4 + i]);
++        }
++    }
++};
++
++#if defined(__GNUC__) && !defined(__clang__)
++#pragma GCC diagnostic pop
++#endif
++
++} // namespace detail
++
++/**
++ * Forward complex FFT for power-of-two sizes N >= 64 on native std::simd, out of place or in place, unnormalised.
++ * Stockham autosort [1]: a radix-8 first pass vectorised over butterflies and transposed in registers on the store,
++ * radix-16 middle passes vectorised over the stride with broadcast twiddles, and one twiddle-free final pass of radix 2, 4, 8 or 16.
++ * Holds scratch buffers, so one instance must not be used by two threads at once. Design and measurements: [2].
++ * [1] T. G. Stockham, "High-speed convolution and correlation," in Proc. AFIPS Spring Joint Comput. Conf., 1966, pp. 229-233.
++ * [2] D. Klein and Claude, "A portable std::simd FFT for GNU Radio 4," 2026. [Online]. Available: https://github.com/dennisklein/fft
++ */
++template<std::floating_point T>
++struct FastFFT {
++    using Kernel                          = detail::FastFFTKernel<T>;
++    using V                               = typename Kernel::V;
++    static constexpr std::size_t kMinSize = 64UZ;
++
++    struct Pass {
++        std::size_t n;
++        std::size_t s;
++        std::size_t radix;
++        std::size_t twiddleOffset;
++    };
++
++    std::size_t                               _size{0UZ};
++    std::vector<Pass>                         _passes;
++    std::vector<T>                            _twiddles;
++    std::vector<T, gr::allocator::Aligned<T>> _work;
++    std::vector<T, gr::allocator::Aligned<T>> _inPlaceCopy;
++
++    [[nodiscard]] std::size_t size() const noexcept { return _size; }
++
++    void resize(std::size_t N) {
++        assert(N >= kMinSize && std::has_single_bit(N));
++        constexpr std::size_t C       = Kernel::C;
++        const auto            twiddle = [](std::size_t k, std::size_t n) { return std::polar(1.0, -2.0 * std::numbers::pi * static_cast<double>(k) / static_cast<double>(n)); };
++
++        _size = N;
++        _passes.clear();
++        _twiddles.clear();
++        std::size_t n = N;
++        std::size_t s = 1UZ;
++        while (n > 1UZ) {
++            const std::size_t radix = s == 1UZ ? 8UZ : std::min(n, 16UZ);
++            const std::size_t m     = n / radix;
++            _passes.push_back({n, s, radix, _twiddles.size()});
++            if (s == 1UZ) { // per group of C butterflies, for k = 1..7: W values (re, re), then W values (-im, im)
++                for (std::size_t group = 0UZ; group < m / C; ++group) {
++                    for (std::size_t k = 1UZ; k < radix; ++k) {
++                        for (std::size_t j = 0UZ; j < C; ++j) {
++                            const T re = static_cast<T>(twiddle(k * (C * group + j), n).real());
++                            _twiddles.insert(_twiddles.end(), {re, re});
++                        }
++                        for (std::size_t j = 0UZ; j < C; ++j) {
++                            const T im = static_cast<T>(twiddle(k * (C * group + j), n).imag());
++                            _twiddles.insert(_twiddles.end(), {-im, im});
++                        }
++                    }
++                }
++            } else if (m > 1UZ) { // per butterfly p, for k = 1..15: (re, re, -im, im)
++                for (std::size_t p = 0UZ; p < m; ++p) {
++                    for (std::size_t k = 1UZ; k < radix; ++k) {
++                        const auto w = twiddle(k * p, n);
++                        _twiddles.insert(_twiddles.end(), {static_cast<T>(w.real()), static_cast<T>(w.real()), static_cast<T>(-w.imag()), static_cast<T>(w.imag())});
++                    }
++                }
++            }
++            n /= radix;
++            s *= radix;
++        }
++        _work.resize(2UZ * N);
++        _inPlaceCopy.resize(2UZ * N);
++    }
++
++    void forward(std::span<const std::complex<T>> in, std::span<std::complex<T>> out) {
++        assert(in.size() == _size && out.size() == _size);
++        const T* x = reinterpret_cast<const T*>(in.data());
++        T*       y = reinterpret_cast<T*>(out.data());
++        if (x == y) {
++            std::memcpy(_inPlaceCopy.data(), x, 2UZ * _size * sizeof(T));
++            x = _inPlaceCopy.data();
++        }
++        const std::size_t nPasses = _passes.size();
++        for (std::size_t i = 0UZ; i < nPasses; ++i) {
++            const bool lastPassIntoOut = (nPasses - 1UZ - i) % 2UZ == 0UZ; // passes alternate so that the last one writes to out
++            T*         dst             = lastPassIntoOut ? y : _work.data();
++            runPass(_passes[i], x, dst);
++            x = dst;
++        }
++    }
++
++    void runPass(const Pass& pass, const T* x, T* y) const {
++        constexpr std::size_t C = Kernel::C;
++        constexpr std::size_t W = Kernel::W;
++        const std::size_t     s = pass.s;
++        const std::size_t     m = pass.n / pass.radix;
++        if (pass.radix == 2UZ) {
++            for (std::size_t q = 0UZ; q < s; q += C) {
++                const V a = Kernel::load(x + 2 * q);
++                const V b = Kernel::load(x + 2 * (q + s));
++                Kernel::store(a + b, y + 2 * q);
++                Kernel::store(a - b, y + 2 * (q + s));
++            }
++        } else if (pass.radix == 4UZ) {
++            for (std::size_t q = 0UZ; q < s; q += C) {
++                V y0, y1, y2, y3;
++                Kernel::butterfly4(Kernel::load(x + 2 * q), Kernel::load(x + 2 * (q + s)), Kernel::load(x + 2 * (q + 2 * s)), Kernel::load(x + 2 * (q + 3 * s)), y0, y1, y2, y3);
++                Kernel::store(y0, y + 2 * q);
++                Kernel::store(y1, y + 2 * (q + s));
++                Kernel::store(y2, y + 2 * (q + 2 * s));
++                Kernel::store(y3, y + 2 * (q + 3 * s));
++            }
++        } else if (s == 1UZ) {
++            constexpr std::size_t kTwiddleValuesPerGroup = 7UZ * 2UZ * W;
++            const T*              t                      = _twiddles.data() + pass.twiddleOffset;
++            for (std::size_t p0 = 0UZ; p0 < m; p0 += C, t += kTwiddleValuesPerGroup) {
++                V a[8], o[8], transposed[8];
++                for (std::size_t k = 0UZ; k < 8UZ; ++k) {
++                    a[k] = Kernel::load(x + 2 * (p0 + k * m));
++                }
++                Kernel::butterfly8(a, o);
++                for (std::size_t k = 1UZ; k < 8UZ; ++k) {
++                    o[k] = Kernel::complexMultiply(o[k], Kernel::load(t + 2 * W * (k - 1)), Kernel::load(t + 2 * W * (k - 1) + W));
++                }
++                Kernel::transpose8(o, transposed);
++                for (std::size_t i = 0UZ; i < 8UZ; ++i) {
++                    Kernel::store(transposed[i], y + 2 * 8 * p0 + W * i);
++                }
++            }
++        } else if (pass.radix == 8UZ) { // final pass, m == 1: no twiddles
++            for (std::size_t q = 0UZ; q < s; q += C) {
++                V a[8], o[8];
++                for (std::size_t k = 0UZ; k < 8UZ; ++k) {
++                    a[k] = Kernel::load(x + 2 * (q + k * s));
++                }
++                Kernel::butterfly8(a, o);
++                for (std::size_t k = 0UZ; k < 8UZ; ++k) {
++                    Kernel::store(o[k], y + 2 * (q + k * s));
++                }
++            }
++        } else {
++            constexpr std::size_t kTwiddleValuesPerButterfly = 15UZ * 4UZ;
++            for (std::size_t p = 0UZ; p < m; ++p) {
++                const T* t  = _twiddles.data() + pass.twiddleOffset + kTwiddleValuesPerButterfly * p;
++                const T* xp = x + 2 * s * p;
++                T*       yp = y + 2 * s * 16 * p;
++                for (std::size_t q = 0UZ; q < s; q += C) {
++                    V a[16], o[16];
++                    for (std::size_t k = 0UZ; k < 16UZ; ++k) {
++                        a[k] = Kernel::load(xp + 2 * (q + k * s * m));
++                    }
++                    Kernel::butterfly16(a, o);
++                    Kernel::store(o[0], yp + 2 * q);
++                    for (std::size_t k = 1UZ; k < 16UZ; ++k) {
++                        Kernel::store(p == 0UZ ? o[k] : Kernel::complexMultiply(o[k], Kernel::broadcastComplex(t + 4 * (k - 1)), Kernel::broadcastComplex(t + 4 * (k - 1) + 2)), yp + 2 * (q + k * s));
++                    }
++                }
++            }
++        }
++    }
++};
++
++} // namespace gr::algorithm
++
++#endif // GNURADIO_ALGORITHM_FASTFFT_HPP
+diff --git a/algorithm/include/gnuradio-4.0/algorithm/fourier/fft.hpp b/algorithm/include/gnuradio-4.0/algorithm/fourier/fft.hpp
+index 5905a31..2bb0356 100644
+--- a/algorithm/include/gnuradio-4.0/algorithm/fourier/fft.hpp
++++ b/algorithm/include/gnuradio-4.0/algorithm/fourier/fft.hpp
+@@ -9,6 +9,7 @@
+ #include <stdexcept>
+ #include <vector>
+ 
++#include <gnuradio-4.0/algorithm/fourier/FastFFT.hpp>
+ #include <gnuradio-4.0/algorithm/fourier/SimdFFT.hpp>
+ #include <gnuradio-4.0/meta/utils.hpp>
+ 
+@@ -104,6 +105,8 @@ struct FFT {
+     mutable std::vector<ValueType, gr::allocator::Aligned<ValueType>> alignedInputBuffer{};
+     mutable std::vector<ValueType, gr::allocator::Aligned<ValueType>> alignedOutputBuffer{};
+     bool                                                              useSimdFFT{true};
++    FastFFT<ValueType>                                                fastFFT{};
++    bool                                                              useFastFFT{true};
+ 
+     void initAll() {
+         precomputeTwiddleFactors();
+@@ -130,6 +133,16 @@ struct FFT {
+             precomputeBluesteinTable(size); // added
+         }
+ 
++        if constexpr (kFastFFTHasNativeSimd && kTransform == Transform::Complex && std::ranges::contiguous_range<decltype(in)> && std::ranges::contiguous_range<decltype(out)> && std::same_as<std::ranges::range_value_t<decltype(in)>, TOutput>) {
++            if (useFastFFT && std::has_single_bit(size) && size >= FastFFT<ValueType>::kMinSize) {
++                if (fastFFT.size() != size) {
++                    fastFFT.resize(size);
++                }
++                fastFFT.forward(std::span<const TOutput>(std::ranges::data(in), size), std::span<TOutput>(std::ranges::data(out), size));
++                return out;
++            }
++        }
++
+         if (useSimdFFT && SimdFFT<ValueType, kTransform>::canProcessSize(size, Order::Ordered) && trySimdFFT(in, out)) { // use SimdFFT if enabled and size is supported
+             return out;
+         }
+diff --git a/algorithm/test/CMakeLists.txt b/algorithm/test/CMakeLists.txt
+index 1ac4486..263ec2b 100644
+--- a/algorithm/test/CMakeLists.txt
++++ b/algorithm/test/CMakeLists.txt
+@@ -34,6 +34,7 @@ add_ut_test(qa_ImChart)
+ add_ut_test(qa_ImGraph)
+ add_ut_test(qa_SchmittTrigger)
+ add_ut_test(qa_SimdFFT)
++add_ut_test(qa_FastFFT)
+ add_ut_test(qa_SvdFilter)
+ add_ut_test(qa_SavitzkyGolay)
+ add_ut_test(qa_SampleRateEstimator)
+@@ -71,6 +72,7 @@ target_link_libraries(qa_ImChart PRIVATE gnuradio-algorithm)
+ target_link_libraries(qa_ImGraph PRIVATE gnuradio-algorithm)
+ target_link_libraries(qa_SchmittTrigger PRIVATE gnuradio-algorithm)
+ target_link_libraries(qa_SimdFFT PRIVATE gnuradio-algorithm)
++target_link_libraries(qa_FastFFT PRIVATE gnuradio-algorithm)
+ target_link_libraries(qa_SvdFilter PRIVATE gnuradio-algorithm)
+ target_link_libraries(qa_SavitzkyGolay PRIVATE gnuradio-algorithm)
+ target_link_libraries(qa_SampleRateEstimator PRIVATE gnuradio-algorithm)
+diff --git a/algorithm/test/qa_FastFFT.cpp b/algorithm/test/qa_FastFFT.cpp
+new file mode 100644
+index 0000000..4d87969
+--- /dev/null
++++ b/algorithm/test/qa_FastFFT.cpp
+@@ -0,0 +1,132 @@
++#include <boost/ut.hpp>
++
++#include <cmath>
++#include <complex>
++#include <format>
++#include <limits>
++#include <numbers>
++#include <random>
++#include <vector>
++
++#include <gnuradio-4.0/algorithm/fourier/FastFFT.hpp>
++#include <gnuradio-4.0/algorithm/fourier/fft.hpp>
++
++namespace {
++
++template<typename T>
++std::vector<std::complex<T>> randomSignal(std::size_t N) {
++    std::mt19937                      generator(static_cast<std::uint32_t>(N));
++    std::uniform_real_distribution<T> uniform(T(-1), T(1));
++    std::vector<std::complex<T>>      signal(N);
++    for (auto& z : signal) {
++        z = {uniform(generator), uniform(generator)};
++    }
++    return signal;
++}
++
++template<typename T>
++std::vector<std::complex<double>> directDft(const std::vector<std::complex<T>>& x) {
++    const std::size_t                 N = x.size();
++    std::vector<std::complex<double>> X(N);
++    for (std::size_t k = 0UZ; k < N; ++k) {
++        for (std::size_t n = 0UZ; n < N; ++n) {
++            const std::size_t phaseIndex = (n * k) % N; // exact reduction keeps the reference accurate for large N
++            X[k] += std::complex<double>(x[n]) * std::polar(1.0, -2.0 * std::numbers::pi * static_cast<double>(phaseIndex) / static_cast<double>(N));
++        }
++    }
++    return X;
++}
++
++template<typename T, typename U>
++double relativeL2Error(const std::vector<std::complex<T>>& actual, const std::vector<std::complex<U>>& expected) {
++    double errorSquared    = 0.0;
++    double expectedSquared = 0.0;
++    for (std::size_t i = 0UZ; i < actual.size(); ++i) {
++        errorSquared += std::norm(std::complex<double>(actual[i]) - std::complex<double>(expected[i]));
++        expectedSquared += std::norm(std::complex<double>(expected[i]));
++    }
++    return std::sqrt(errorSquared / expectedSquared);
++}
++
++template<typename T>
++double toleranceFor(std::size_t N) { // rounding error of a radix-r FFT grows with the number of passes, ~log2(N)
++    return 4.0 * static_cast<double>(std::numeric_limits<T>::epsilon()) * std::log2(static_cast<double>(N));
++}
++
++template<typename T>
++std::vector<std::complex<T>> fastForward(const std::vector<std::complex<T>>& in) {
++    gr::algorithm::FastFFT<T>    fft;
++    std::vector<std::complex<T>> out(in.size());
++    fft.resize(in.size());
++    fft.forward(in, out);
++    return out;
++}
++
++} // namespace
++
++const boost::ut::suite<"FastFFT"> fastFFTTests = [] {
++    using namespace boost::ut;
++    using gr::algorithm::FastFFT;
++
++    if constexpr (!gr::algorithm::kFastFFTHasNativeSimd) {
++        skip / "FastFFT needs a native std::simd backend"_test = [] {};
++        return;
++    }
++
++    "matches a direct DFT for every power-of-two size from 64 to 4096"_test = []<typename T> {
++        for (std::size_t N = FastFFT<T>::kMinSize; N <= 4096UZ; N *= 2UZ) {
++            const auto signal = randomSignal<T>(N);
++            const auto error  = relativeL2Error(fastForward(signal), directDft(signal));
++            expect(le(error, toleranceFor<T>(N))) << std::format("N={} relative L2 error {:.3g}", N, error);
++        }
++    } | std::tuple<float, double>{};
++
++    "a unit impulse transforms to all ones"_test = []<typename T> {
++        for (std::size_t N : {64UZ, 1024UZ, 1UZ << 16UZ}) {
++            std::vector<std::complex<T>> impulse(N);
++            impulse[0]                 = T(1);
++            const auto        spectrum = fastForward(impulse);
++            const std::vector ones(N, std::complex<T>(1));
++            expect(le(relativeL2Error(spectrum, ones), toleranceFor<T>(N))) << std::format("N={}", N);
++        }
++    } | std::tuple<float, double>{};
++
++    "a complex tone at bin k transforms to N at bin k and zero elsewhere"_test = []<typename T> {
++        for (std::size_t N : {64UZ, 4096UZ, 1UZ << 18UZ}) {
++            const std::size_t            bin = N / 8UZ + 3UZ;
++            std::vector<std::complex<T>> tone(N);
++            for (std::size_t n = 0UZ; n < N; ++n) {
++                tone[n] = std::complex<T>(std::polar(1.0, 2.0 * std::numbers::pi * static_cast<double>((bin * n) % N) / static_cast<double>(N)));
++            }
++            std::vector<std::complex<double>> expected(N);
++            expected[bin] = static_cast<double>(N);
++            expect(le(relativeL2Error(fastForward(tone), expected), toleranceFor<T>(N))) << std::format("N={}", N);
++        }
++    } | std::tuple<float, double>{};
++
++    "an in-place transform equals the out-of-place one"_test = []<typename T> {
++        constexpr std::size_t N          = 2048UZ;
++        auto                  data       = randomSignal<T>(N);
++        const auto            outOfPlace = fastForward(data);
++        FastFFT<T>            fft;
++        fft.resize(N);
++        fft.forward(data, data);
++        expect(eq(relativeL2Error(data, outOfPlace), 0.0));
++    } | std::tuple<float, double>{};
++
++    "gr::algorithm::FFT gives the same spectrum with FastFFT on and off"_test = []<typename T> {
++        for (std::size_t N : {64UZ, 512UZ, 8192UZ}) {
++            const auto                                           signal = randomSignal<T>(N);
++            gr::algorithm::FFT<std::complex<T>, std::complex<T>> withFastFFT;
++            gr::algorithm::FFT<std::complex<T>, std::complex<T>> withoutFastFFT;
++            withoutFastFFT.useFastFFT = false;
++            std::vector<std::complex<T>> spectrumFast(N);
++            std::vector<std::complex<T>> spectrumReference(N);
++            withFastFFT.compute(signal, spectrumFast);
++            withoutFastFFT.compute(signal, spectrumReference);
++            expect(le(relativeL2Error(spectrumFast, spectrumReference), 2.0 * toleranceFor<T>(N))) << std::format("N={}", N);
++        }
++    } | std::tuple<float, double>{};
++};
++
++int main() { /* not needed for UT */ }
+-- 
+2.43.0
+

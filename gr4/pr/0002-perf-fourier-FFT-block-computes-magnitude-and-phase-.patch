@@ -1,0 +1,69 @@
+From 043b78b9ffa9a89529cc917c96ad63c167ee1a0d Mon Sep 17 00:00:00 2001
+From: Dennis Klein <d.klein@gsi.de>
+Date: Sun, 11 Oct 2026 17:24:33 +0000
+Subject: [PATCH] perf(fourier): FFT block computes magnitude and phase in one
+ pass
+
+The FFT block transforms into its preallocated `_outData` and fills `_magnitudeSpectrum` and `_phaseSpectrum` in one loop, writing each bin straight to its fftshifted position.
+Results equal `computeMagnitudeSpectrum`/`computePhaseSpectrum` (unchanged `qa_FFT`); the per-frame output allocation, the two spectrum temporaries and the two rotations go away.
+Phase unwrapping still runs in natural bin order before the degree conversion and the shift.
+
+`bm_fft_block` (N = 1024), median of 100, GCC trunk `-O2 -march=native`, one pinned core of a Xeon VM, two alternating runs each:
+
+| type                 | main       | this commit |
+| -------------------- | ---------: | ----------: |
+| std::complex<float>  | 79, 66 us  | 67, 66 us   |
+| std::complex<double> | 99, 90 us  | 59, 62 us   |
+| float                | 26, 23 us  | 21, 23 us   |
+| double               | 30, 28 us  | 27, 28 us   |
+
+### Changes
+
+- `fourier/fft.hpp`: `computeSpectrum` transforms in place into `_outData` and fuses magnitude, phase and shift
+---
+ .../include/gnuradio-4.0/fourier/fft.hpp      | 29 +++++++++++++++++--
+ 1 file changed, 26 insertions(+), 3 deletions(-)
+
+diff --git a/blocks/fourier/include/gnuradio-4.0/fourier/fft.hpp b/blocks/fourier/include/gnuradio-4.0/fourier/fft.hpp
+index 46ce703..02bcd7c 100644
+--- a/blocks/fourier/include/gnuradio-4.0/fourier/fft.hpp
++++ b/blocks/fourier/include/gnuradio-4.0/fourier/fft.hpp
+@@ -351,9 +351,32 @@ streaming form, which emits the bins themselves and applies no window.
+ 
+         gr::algorithm::fft::applyWindow(std::span<InDataType>(_inData), std::span<const value_type>(window_coefficients));
+ 
+-        _outData           = _fftImpl.compute(_inData);
+-        _magnitudeSpectrum = gr::algorithm::fft::computeMagnitudeSpectrum(_outData, _magnitudeSpectrum, gr::algorithm::fft::ConfigMagnitude{.computeHalfSpectrum = !computeFullSpectrum, .includeNyquist = true, .outputInDb = output_in_db, .shiftSpectrum = true});
+-        _phaseSpectrum     = gr::algorithm::fft::computePhaseSpectrum(_outData, _phaseSpectrum, gr::algorithm::fft::ConfigPhase{.computeHalfSpectrum = !computeFullSpectrum, .includeNyquist = true, .outputInDeg = output_in_deg, .unwrapPhase = unwrap_phase, .shiftSpectrum = true});
++        _fftImpl.compute(_inData, _outData); // into the preallocated buffer, no per-frame allocation
++
++        // magnitude and phase in one pass, written straight to their fftshifted position (same results as
++        // computeMagnitudeSpectrum/computePhaseSpectrum, minus their temporaries and the two rotations)
++        const std::size_t N      = _outData.size();
++        const std::size_t nBins  = _magnitudeSpectrum.size();
++        const std::size_t shift  = computeFullSpectrum ? N - N / 2UZ : 0UZ; // rotate left by N/2
++        const bool        inDb   = output_in_db;
++        const bool        inDeg  = output_in_deg;
++        const bool        unwrap = unwrap_phase;
++        for (std::size_t i = 0UZ; i < nBins; ++i) {
++            const std::size_t dst            = computeFullSpectrum ? (i + shift) % N : i;
++            const bool        twin           = computeFullSpectrum || (i != 0UZ && !(N % 2UZ == 0UZ && i == N / 2UZ));
++            _magnitudeSpectrum[dst]          = gr::algorithm::fft::computeMagnitudeOne(_outData[i], N, inDb, twin);
++            const value_type phase           = gr::algorithm::fft::computePhaseOne(_outData[i]);
++            _phaseSpectrum[unwrap ? i : dst] = inDeg && !unwrap ? gr::algorithm::fft::radToDeg(phase) : phase;
++        }
++        if (unwrap) { // unwrapping runs in natural bin order, before the degree conversion and the shift
++            gr::algorithm::fft::unwrapPhase(std::span<value_type>(_phaseSpectrum));
++            if (inDeg) {
++                std::ranges::transform(_phaseSpectrum, _phaseSpectrum.begin(), [](value_type phase) { return gr::algorithm::fft::radToDeg(phase); });
++            }
++            if constexpr (computeFullSpectrum) {
++                std::ranges::rotate(_phaseSpectrum, _phaseSpectrum.begin() + std::ssize(_phaseSpectrum) / 2);
++            }
++        }
+     }
+ 
+     constexpr U assembleDataSet() {
+-- 
+2.43.0
+

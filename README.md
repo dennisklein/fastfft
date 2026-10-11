@@ -28,6 +28,7 @@ bench/build_gcc_trunk.sh     builds GCC trunk (C++26 std::simd) into a local pre
 bench/gr4_compare.sh         builds gnuradio4 with and without the patch, runs its tests and block benchmarks
 gr4/0001-fastfft.patch       patch for gnuradio4 (rev af62235) that uses fastfft in gr::algorithm::FFT
 gr4/0002-bm_fft_stream.patch gnuradio4 benchmark for the streaming FFT block (used by gr4_compare.sh)
+gr4/pr/                      the upstream pull request: two commits for gnuradio4 main (rev 442345b), apply with git am
 paper/                       LaTeX source, PDF, mkdata.py (results -> tables and figure data)
 results/                     measurements, one directory per host and run
 ```
