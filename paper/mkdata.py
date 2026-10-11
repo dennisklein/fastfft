@@ -71,6 +71,34 @@ def cell(label, impl, prec, n):
     return f"{ns(r['median_ns'])} {{\\scriptsize[{ns(r['ci_lo'])}, {ns(r['ci_hi'])}]}}"
 
 
+XT = "xtick={64,256,1024,4096,16384,65536,262144,1048576},xticklabels={$2^6$,$2^8$,$2^{10}$,$2^{12}$,$2^{14}$,$2^{16}$,$2^{18}$,$2^{20}$}"
+
+
+def fig(key, caption, series, src=None):
+    """Plot of median time / (N log2 N) with the 95% CI as error bars, one line per (legend, label, impl, prec)."""
+    src = T if src is None else src
+    plots = []
+    for i, (leg, label, impl, prec) in enumerate(series):
+        rows = [(n, src[(label, impl, prec, n)]) for n in NS if (label, impl, prec, n) in src]
+        if not rows:
+            continue
+        fn = f"data/plot-{key}-{i}.dat"
+        with open(os.path.join(here, fn), "w") as f:
+            f.write("n y em ep\n")
+            for n, r in rows:
+                d = n * (n.bit_length() - 1)
+                y, lo, hi = float(r["median_ns"]) / d, float(r["ci_lo"]) / d, float(r["ci_hi"]) / d
+                f.write(f"{n} {y:.5f} {y - lo:.5f} {hi - y:.5f}\n")
+        plots.append(f"\\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{{{fn}}};"
+                     f"\\addlegendentry{{{leg}}}")
+    return (f"\\begin{{figure}}[h]\\centering\\begin{{tikzpicture}}\\begin{{axis}}[width=0.8\\textwidth,height=62mm,"
+            f"xmode=log,log basis x=2,{XT},xlabel={{transform size $N$}},ylabel={{ns / $(N\\log_2 N)$}},grid=major,"
+            f"grid style={{gray!25}},legend style={{font=\\footnotesize,at={{(0.5,1.03)}},anchor=south,draw=none}},legend columns=3,"
+            f"tick label style={{font=\\footnotesize}}]\n" + "\n".join(plots) +
+            f"\n\\end{{axis}}\\end{{tikzpicture}}\\caption{{{caption} Time per transform divided by $N\\log_2 N$ "
+            f"(lower is faster), error bars: 95\\,\\% CI of the median.}}\\label{{fig:{key}}}\\end{{figure}}\n")
+
+
 def scell(label, base, prec, n):
     s = S.get((label, base, prec, n))
     if not s:
@@ -98,6 +126,7 @@ $N$ & fastfft & gr4 SimdFFT & FFTW 3.3.10 & vs.\\ SimdFFT & vs.\\ FFTW\\\\\\midr
         tables.append(f"$2^{{{n.bit_length() - 1}}}$ & {cell(NATIVE, 'fastfft', prec, n)} & {cell(NATIVE, 'gr4-SimdFFT', prec, n)} & "
                       f"{cell(NATIVE, 'fftw', prec, n)} & {scell(NATIVE, 'gr4-SimdFFT', prec, n)} & {scell(NATIVE, 'fftw', prec, n)}\\\\")
     tables.append("\\bottomrule\\end{tabular}\\end{table}\n")
+    tables.append(fig(prec, f"Complex {prec}, GCC 14.2 (Table~\\ref{{{tab}}}).", [("fastfft", NATIVE, "fastfft", prec), ("SimdFFT", NATIVE, "gr4-SimdFFT", prec), ("FFTW", NATIVE, "fftw", prec)]))
 
 widths = sorted({r["label"] for r in summ if re.fullmatch(r"w\d+", r["label"])}, key=lambda l: int(l[1:]))
 if len(widths) > 1:
@@ -110,6 +139,7 @@ $N$ & {' & '.join(f'{int(w[1:]) * 8} bit' for w in widths)} & SimdFFT\\\\\\midru
         tables.append(f"$2^{{{n.bit_length() - 1}}}$ & " + " & ".join(cell(w, "fastfft", "float", n) for w in widths)
                       + f" & {cell(NATIVE, 'gr4-SimdFFT', 'float', n)}\\\\")
     tables.append("\\bottomrule\\end{tabular}\\end{table}\n")
+    tables.append(fig("width", "Vector width, complex float (Table~\\ref{tab:width}).", [(f"{int(w[1:]) * 8} bit", w, "fastfft", "float") for w in widths] + [("SimdFFT", NATIVE, "gr4-SimdFFT", "float")]))
 
 if any(r["label"] == "libcxx" for r in summ):
     tables.append("""\\begin{table}[h]\\centering
@@ -121,6 +151,7 @@ $N$ & fastfft, libstdc++ & fastfft, libc++ & SimdFFT, libstdc++ & SimdFFT, libc+
         tables.append(f"$2^{{{n.bit_length() - 1}}}$ & {cell(NATIVE, 'fastfft', 'float', n)} & {cell('libcxx', 'fastfft', 'float', n)} & "
                       f"{cell(NATIVE, 'gr4-SimdFFT', 'float', n)} & {cell('libcxx', 'gr4-SimdFFT', 'float', n)}\\\\")
     tables.append("\\bottomrule\\end{tabular}\\end{table}\n")
+    tables.append(fig("libcxx", "Standard library, complex float (Table~\\ref{tab:libcxx}).", [("fastfft, libstdc++", NATIVE, "fastfft", "float"), ("fastfft, libc++", "libcxx", "fastfft", "float"), ("SimdFFT, libstdc++", NATIVE, "gr4-SimdFFT", "float"), ("SimdFFT, libc++", "libcxx", "gr4-SimdFFT", "float")]))
 
 num_tr = {}
 if any(r["label"] == "gcc17" for r in summ):
@@ -144,6 +175,7 @@ $N$ & exp., GCC 14 & exp., trunk & C++26 & cx & cx, bit\\_cast & SimdFFT\\\\\\mi
                           f"{scell('gcc17', 'fastfft', prec, n)} & {scell('gcc17', 'fastfft-cx', prec, n)} & "
                           f"{scell('gcc17-cxbc', 'fastfft-cx', prec, n)} & {scell('gcc17', 'gr4-SimdFFT', prec, n)}\\\\")
         tables.append("\\bottomrule\\end{tabular}\\end{table}\n")
+        tables.append(fig(f"gcc17-{prec}", f"GCC trunk, complex {prec} (Table~\\ref{{tab:gcc17-{prec}}}).", [("exp., GCC 14", NATIVE, "fastfft", prec), ("exp., trunk", "gcc17-exp", "fastfft", prec), ("C++26", "gcc17", "fastfft", prec), ("cx", "gcc17", "fastfft-cx", prec), ("cx, bit\\_cast", "gcc17-cxbc", "fastfft-cx", prec), ("SimdFFT", "gcc17", "gr4-SimdFFT", prec)]))
 
     def ratios(num_, den_, prec, lo=0, hi=1 << 30):
         v = [med(*num_, prec, n) / med(*den_, prec, n) for n in NS if lo <= n <= hi and med(*num_, prec, n) and med(*den_, prec, n)]
@@ -221,6 +253,18 @@ speedup as median of paired per-run ratios [95\\,\\% CI].}\\label{tab:gr4}
     for name, b, p, s, lo, hi in rows:
         tables.append(f"\\texttt{{{name.replace('<', '$<$').replace('>', '$>$').replace('_', '\\_')}}} & {b.replace('µs', '\\,\\textmu s').replace(' ns', '\\,ns')} & {p.replace('µs', '\\,\\textmu s').replace(' ns', '\\,ns')} & {s} {{\\scriptsize[{lo}, {hi}]}}\\\\")
     tables.append("\\bottomrule\\end{tabular}\\end{table}\n")
+    with open(os.path.join(here, "data", "plot-gr4.dat"), "w") as f:
+        f.write("i s em ep\n")
+        for k, (name, b, p, sv, lo, hi) in enumerate(rows):
+            f.write(f"{k} {sv} {float(sv) - float(lo):.3f} {float(hi) - float(sv):.3f}\n")
+    labels = ",".join("{\\texttt{" + re.sub(r"\s+", " ", n).replace("<", "$<$").replace(">", "$>$").replace("_", "\\_") + "}}" for n, *_ in rows)
+    tables.append("\\begin{figure}[h]\\centering\\begin{tikzpicture}\\begin{axis}[xbar,width=0.5\\textwidth,"
+                  f"height={6 + 5 * len(rows)}mm,y dir=reverse,ytick={{0,...,{len(rows) - 1}}},yticklabels={{{labels}}},"
+                  "xlabel={speedup of the patched build},xmin=0,grid=major,grid style={gray!25},tick label style={font=\\scriptsize},"
+                  "bar width=3pt,enlarge y limits=0.03,extra x ticks={1},extra x tick style={grid style={black}}]\n"
+                  "\\addplot+[error bars/.cd,x dir=both,x explicit] table[x=s,y=i,x error plus=ep,x error minus=em]{data/plot-gr4.dat};\n"
+                  "\\end{axis}\\end{tikzpicture}\\caption{gnuradio4 blocks, speedup of the patched build (Table~\\ref{tab:gr4}), "
+                  "error bars: 95\\,\\% CI of the median of paired ratios.}\\label{fig:gr4}\\end{figure}\n")
     st = {"float": [], "double": []}
     for name, b, p, s, lo, hi in rows:
         m = re.match(r"FFT<(float32|float64|float|double)> stream", name)
@@ -278,6 +322,7 @@ $N$ & fastfft & SimdFFT & FFTW & vs.\\ SimdFFT & vs.\\ FFTW & C++26 & exp., trun
                           f"{s2(N2, 'gr4-SimdFFT', prec, n)} & {s2(N2, 'fftw', prec, n)} & {c2('gcc17', 'fastfft', prec, n)} & "
                           f"{c2('gcc17-exp', 'fastfft', prec, n)} & {c2('gcc17', 'fastfft-cx', prec, n)}\\\\")
         tables.append("\\bottomrule\\end{tabular}\\end{table}\n")
+        tables.append(fig(f"two-{prec}", f"Second host, complex {prec} (Table~\\ref{{tab:two-{prec}}}).", [("fastfft", N2, "fastfft", prec), ("SimdFFT", N2, "gr4-SimdFFT", prec), ("FFTW", N2, "fftw", prec), ("C++26, trunk", "gcc17", "fastfft", prec), ("exp., trunk", "gcc17-exp", "fastfft", prec), ("cx, trunk", "gcc17", "fastfft-cx", prec)], T2))
         sv = lambda base: [float(S2[(N2, base, prec, n)]["speedup"]) for n in NS if (N2, base, prec, n) in S2]
         num[f"Two{P}VsGr"] = f"{min(sv('gr4-SimdFFT')):.1f}--{max(sv('gr4-SimdFFT')):.1f}$\\times$"
         num[f"Two{P}VsFftw"] = f"{min(sv('fftw')):.2f}--{max(sv('fftw')):.2f}$\\times$"

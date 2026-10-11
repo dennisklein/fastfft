@@ -19,6 +19,12 @@ $2^{19}$ & 2.105\,M {\scriptsize[2.083\,M, 2.121\,M]} & 4.429\,M {\scriptsize[4.
 $2^{20}$ & 5.474\,M {\scriptsize[5.427\,M, 5.542\,M]} & 8.954\,M {\scriptsize[8.908\,M, 9.016\,M]} & 8.029\,M {\scriptsize[7.976\,M, 8.078\,M]} & 1.65 {\scriptsize[1.64, 1.66]} & 1.46 {\scriptsize[1.46, 1.49]}\\
 \bottomrule\end{tabular}\end{table}
 
+\begin{figure}[h]\centering\begin{tikzpicture}\begin{axis}[width=0.8\textwidth,height=62mm,xmode=log,log basis x=2,xtick={64,256,1024,4096,16384,65536,262144,1048576},xticklabels={$2^6$,$2^8$,$2^{10}$,$2^{12}$,$2^{14}$,$2^{16}$,$2^{18}$,$2^{20}$},xlabel={transform size $N$},ylabel={ns / $(N\log_2 N)$},grid=major,grid style={gray!25},legend style={font=\footnotesize,at={(0.5,1.03)},anchor=south,draw=none},legend columns=3,tick label style={font=\footnotesize}]
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-float-0.dat};\addlegendentry{fastfft}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-float-1.dat};\addlegendentry{SimdFFT}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-float-2.dat};\addlegendentry{FFTW}
+\end{axis}\end{tikzpicture}\caption{Complex float, GCC 14.2 (Table~\ref{tab:float}). Time per transform divided by $N\log_2 N$ (lower is faster), error bars: 95\,\% CI of the median.}\label{fig:float}\end{figure}
+
 \begin{table}[h]\centering
 \caption{Complex double, GCC 14.2: median ns per transform [95\,\% CI] and speedup of fastfft (median of paired ratios [95\,\% CI]).}\label{tab:double}
 \begin{tabular}{rlllll}\toprule
@@ -39,6 +45,12 @@ $2^{18}$ & 2.083\,M {\scriptsize[2.059\,M, 2.100\,M]} & 4.027\,M {\scriptsize[3.
 $2^{19}$ & 4.599\,M {\scriptsize[4.536\,M, 4.679\,M]} & 8.812\,M {\scriptsize[8.739\,M, 8.854\,M]} & 5.187\,M {\scriptsize[5.157\,M, 5.221\,M]} & 1.90 {\scriptsize[1.89, 1.93]} & 1.13 {\scriptsize[1.11, 1.14]}\\
 $2^{20}$ & 12.501\,M {\scriptsize[12.066\,M, 12.788\,M]} & 18.515\,M {\scriptsize[18.254\,M, 18.966\,M]} & 10.232\,M {\scriptsize[10.180\,M, 10.375\,M]} & 1.51 {\scriptsize[1.45, 1.57]} & 0.85 {\scriptsize[0.84, 0.87]}\\
 \bottomrule\end{tabular}\end{table}
+
+\begin{figure}[h]\centering\begin{tikzpicture}\begin{axis}[width=0.8\textwidth,height=62mm,xmode=log,log basis x=2,xtick={64,256,1024,4096,16384,65536,262144,1048576},xticklabels={$2^6$,$2^8$,$2^{10}$,$2^{12}$,$2^{14}$,$2^{16}$,$2^{18}$,$2^{20}$},xlabel={transform size $N$},ylabel={ns / $(N\log_2 N)$},grid=major,grid style={gray!25},legend style={font=\footnotesize,at={(0.5,1.03)},anchor=south,draw=none},legend columns=3,tick label style={font=\footnotesize}]
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-double-0.dat};\addlegendentry{fastfft}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-double-1.dat};\addlegendentry{SimdFFT}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-double-2.dat};\addlegendentry{FFTW}
+\end{axis}\end{tikzpicture}\caption{Complex double, GCC 14.2 (Table~\ref{tab:double}). Time per transform divided by $N\log_2 N$ (lower is faster), error bars: 95\,\% CI of the median.}\label{fig:double}\end{figure}
 
 \begin{table}[h]\centering
 \caption{Vector width, complex float: fastfft compiled for 128, 256, 512-bit vectors
@@ -62,6 +74,13 @@ $2^{19}$ & 3.826\,M {\scriptsize[3.769\,M, 3.896\,M]} & 2.541\,M {\scriptsize[2.
 $2^{20}$ & 8.354\,M {\scriptsize[8.325\,M, 8.396\,M]} & 6.035\,M {\scriptsize[6.011\,M, 6.068\,M]} & 5.474\,M {\scriptsize[5.427\,M, 5.542\,M]} & 8.954\,M {\scriptsize[8.908\,M, 9.016\,M]}\\
 \bottomrule\end{tabular}\end{table}
 
+\begin{figure}[h]\centering\begin{tikzpicture}\begin{axis}[width=0.8\textwidth,height=62mm,xmode=log,log basis x=2,xtick={64,256,1024,4096,16384,65536,262144,1048576},xticklabels={$2^6$,$2^8$,$2^{10}$,$2^{12}$,$2^{14}$,$2^{16}$,$2^{18}$,$2^{20}$},xlabel={transform size $N$},ylabel={ns / $(N\log_2 N)$},grid=major,grid style={gray!25},legend style={font=\footnotesize,at={(0.5,1.03)},anchor=south,draw=none},legend columns=3,tick label style={font=\footnotesize}]
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-width-0.dat};\addlegendentry{128 bit}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-width-1.dat};\addlegendentry{256 bit}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-width-2.dat};\addlegendentry{512 bit}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-width-3.dat};\addlegendentry{SimdFFT}
+\end{axis}\end{tikzpicture}\caption{Vector width, complex float (Table~\ref{tab:width}). Time per transform divided by $N\log_2 N$ (lower is faster), error bars: 95\,\% CI of the median.}\label{fig:width}\end{figure}
+
 \begin{table}[h]\centering
 \caption{Standard library: complex float built with GCC/libstdc++ (native simd) and with clang/libc++ (vir-simd array
 emulation), median ns per transform [95\,\% CI].}\label{tab:libcxx}
@@ -83,6 +102,13 @@ $2^{18}$ & 1.031\,M {\scriptsize[1.021\,M, 1.042\,M]} & 3.792\,M {\scriptsize[3.
 $2^{19}$ & 2.105\,M {\scriptsize[2.083\,M, 2.121\,M]} & 9.006\,M {\scriptsize[8.951\,M, 9.051\,M]} & 4.429\,M {\scriptsize[4.378\,M, 4.506\,M]} & 5.314\,M {\scriptsize[5.237\,M, 5.347\,M]}\\
 $2^{20}$ & 5.474\,M {\scriptsize[5.427\,M, 5.542\,M]} & 19.933\,M {\scriptsize[19.450\,M, 20.493\,M]} & 8.954\,M {\scriptsize[8.908\,M, 9.016\,M]} & 11.341\,M {\scriptsize[11.250\,M, 11.429\,M]}\\
 \bottomrule\end{tabular}\end{table}
+
+\begin{figure}[h]\centering\begin{tikzpicture}\begin{axis}[width=0.8\textwidth,height=62mm,xmode=log,log basis x=2,xtick={64,256,1024,4096,16384,65536,262144,1048576},xticklabels={$2^6$,$2^8$,$2^{10}$,$2^{12}$,$2^{14}$,$2^{16}$,$2^{18}$,$2^{20}$},xlabel={transform size $N$},ylabel={ns / $(N\log_2 N)$},grid=major,grid style={gray!25},legend style={font=\footnotesize,at={(0.5,1.03)},anchor=south,draw=none},legend columns=3,tick label style={font=\footnotesize}]
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-libcxx-0.dat};\addlegendentry{fastfft, libstdc++}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-libcxx-1.dat};\addlegendentry{fastfft, libc++}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-libcxx-2.dat};\addlegendentry{SimdFFT, libstdc++}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-libcxx-3.dat};\addlegendentry{SimdFFT, libc++}
+\end{axis}\end{tikzpicture}\caption{Standard library, complex float (Table~\ref{tab:libcxx}). Time per transform divided by $N\log_2 N$ (lower is faster), error bars: 95\,\% CI of the median.}\label{fig:libcxx}\end{figure}
 
 \begin{table}[h]\centering
 \caption{GCC trunk (17.0) with \texttt{-std=c++26}, complex float: median ns per transform [95\,\% CI].
@@ -108,6 +134,15 @@ $2^{19}$ & \begin{tabular}[t]{@{}r@{}}2.105\,M\\{\scriptsize[2.083\,M, 2.121\,M]
 $2^{20}$ & \begin{tabular}[t]{@{}r@{}}5.474\,M\\{\scriptsize[5.427\,M, 5.542\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}4.957\,M\\{\scriptsize[4.865\,M, 5.049\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}5.837\,M\\{\scriptsize[5.736\,M, 5.979\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}5.116\,M\\{\scriptsize[5.068\,M, 5.231\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}4.680\,M\\{\scriptsize[4.654\,M, 4.705\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}9.211\,M\\{\scriptsize[9.058\,M, 9.323\,M]}\end{tabular}\\
 \bottomrule\end{tabular}\end{table}
 
+\begin{figure}[h]\centering\begin{tikzpicture}\begin{axis}[width=0.8\textwidth,height=62mm,xmode=log,log basis x=2,xtick={64,256,1024,4096,16384,65536,262144,1048576},xticklabels={$2^6$,$2^8$,$2^{10}$,$2^{12}$,$2^{14}$,$2^{16}$,$2^{18}$,$2^{20}$},xlabel={transform size $N$},ylabel={ns / $(N\log_2 N)$},grid=major,grid style={gray!25},legend style={font=\footnotesize,at={(0.5,1.03)},anchor=south,draw=none},legend columns=3,tick label style={font=\footnotesize}]
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-gcc17-float-0.dat};\addlegendentry{exp., GCC 14}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-gcc17-float-1.dat};\addlegendentry{exp., trunk}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-gcc17-float-2.dat};\addlegendentry{C++26}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-gcc17-float-3.dat};\addlegendentry{cx}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-gcc17-float-4.dat};\addlegendentry{cx, bit\_cast}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-gcc17-float-5.dat};\addlegendentry{SimdFFT}
+\end{axis}\end{tikzpicture}\caption{GCC trunk, complex float (Table~\ref{tab:gcc17-float}). Time per transform divided by $N\log_2 N$ (lower is faster), error bars: 95\,\% CI of the median.}\label{fig:gcc17-float}\end{figure}
+
 \begin{table}[h]\centering
 \caption{GCC trunk (17.0) with \texttt{-std=c++26}, complex double: median ns per transform [95\,\% CI].
 fastfft on \texttt{<experimental/simd>} (GCC 14 and trunk), on C++26 \texttt{std::simd}, and fastfft::cx on
@@ -131,6 +166,15 @@ $2^{18}$ & \begin{tabular}[t]{@{}r@{}}2.083\,M\\{\scriptsize[2.059\,M, 2.100\,M]
 $2^{19}$ & \begin{tabular}[t]{@{}r@{}}4.599\,M\\{\scriptsize[4.536\,M, 4.679\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}4.199\,M\\{\scriptsize[4.173\,M, 4.236\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}5.022\,M\\{\scriptsize[4.920\,M, 5.213\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}4.422\,M\\{\scriptsize[4.350\,M, 4.528\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}3.824\,M\\{\scriptsize[3.791\,M, 3.861\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}8.947\,M\\{\scriptsize[8.887\,M, 9.026\,M]}\end{tabular}\\
 $2^{20}$ & \begin{tabular}[t]{@{}r@{}}12.501\,M\\{\scriptsize[12.066\,M, 12.788\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}10.151\,M\\{\scriptsize[10.061\,M, 10.241\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}13.141\,M\\{\scriptsize[12.723\,M, 13.383\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}11.766\,M\\{\scriptsize[11.528\,M, 11.989\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}9.922\,M\\{\scriptsize[9.834\,M, 10.069\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}19.523\,M\\{\scriptsize[18.817\,M, 19.845\,M]}\end{tabular}\\
 \bottomrule\end{tabular}\end{table}
+
+\begin{figure}[h]\centering\begin{tikzpicture}\begin{axis}[width=0.8\textwidth,height=62mm,xmode=log,log basis x=2,xtick={64,256,1024,4096,16384,65536,262144,1048576},xticklabels={$2^6$,$2^8$,$2^{10}$,$2^{12}$,$2^{14}$,$2^{16}$,$2^{18}$,$2^{20}$},xlabel={transform size $N$},ylabel={ns / $(N\log_2 N)$},grid=major,grid style={gray!25},legend style={font=\footnotesize,at={(0.5,1.03)},anchor=south,draw=none},legend columns=3,tick label style={font=\footnotesize}]
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-gcc17-double-0.dat};\addlegendentry{exp., GCC 14}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-gcc17-double-1.dat};\addlegendentry{exp., trunk}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-gcc17-double-2.dat};\addlegendentry{C++26}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-gcc17-double-3.dat};\addlegendentry{cx}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-gcc17-double-4.dat};\addlegendentry{cx, bit\_cast}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-gcc17-double-5.dat};\addlegendentry{SimdFFT}
+\end{axis}\end{tikzpicture}\caption{GCC trunk, complex double (Table~\ref{tab:gcc17-double}). Time per transform divided by $N\log_2 N$ (lower is faster), error bars: 95\,\% CI of the median.}\label{fig:gcc17-double}\end{figure}
 
 \begin{table}[h]\centering
 \caption{Accuracy: largest $\max_k|X_k-\hat X_k|/\max_k|\hat X_k|$ over all $N$, against a long-double reference.}\label{tab:acc}
@@ -167,6 +211,10 @@ speedup as median of paired per-run ratios [95\,\% CI].}\label{tab:gr4}
 \texttt{FFT$<$float64$>$ stream N=1048576} & 19490.0 \,\textmu s & 11470.0 \,\textmu s & 1.74 {\scriptsize[1.66, 1.76]}\\
 \bottomrule\end{tabular}\end{table}
 
+\begin{figure}[h]\centering\begin{tikzpicture}\begin{axis}[xbar,width=0.5\textwidth,height=116mm,y dir=reverse,ytick={0,...,21},yticklabels={{\texttt{std::complex$<$float$>$ - fft}},{\texttt{std::complex$<$float$>$ - fftCT}},{\texttt{std::complex$<$double$>$ - fft}},{\texttt{std::complex$<$double$>$ - fftCT}},{\texttt{float - fft}},{\texttt{double - fft}},{\texttt{FFT$<$float32$>$ stream N= 64}},{\texttt{FFT$<$float32$>$ stream N= 256}},{\texttt{FFT$<$float32$>$ stream N= 1024}},{\texttt{FFT$<$float32$>$ stream N= 4096}},{\texttt{FFT$<$float32$>$ stream N= 16384}},{\texttt{FFT$<$float32$>$ stream N= 65536}},{\texttt{FFT$<$float32$>$ stream N= 262144}},{\texttt{FFT$<$float32$>$ stream N=1048576}},{\texttt{FFT$<$float64$>$ stream N= 64}},{\texttt{FFT$<$float64$>$ stream N= 256}},{\texttt{FFT$<$float64$>$ stream N= 1024}},{\texttt{FFT$<$float64$>$ stream N= 4096}},{\texttt{FFT$<$float64$>$ stream N= 16384}},{\texttt{FFT$<$float64$>$ stream N= 65536}},{\texttt{FFT$<$float64$>$ stream N= 262144}},{\texttt{FFT$<$float64$>$ stream N=1048576}}},xlabel={speedup of the patched build},xmin=0,grid=major,grid style={gray!25},tick label style={font=\scriptsize},bar width=3pt,enlarge y limits=0.03,extra x ticks={1},extra x tick style={grid style={black}}]
+\addplot+[error bars/.cd,x dir=both,x explicit] table[x=s,y=i,x error plus=ep,x error minus=em]{data/plot-gr4.dat};
+\end{axis}\end{tikzpicture}\caption{gnuradio4 blocks, speedup of the patched build (Table~\ref{tab:gr4}), error bars: 95\,\% CI of the median of paired ratios.}\label{fig:gr4}\end{figure}
+
 \begin{table}[h]\centering
 \caption{Second host, AMD Ryzen AI 9 HX 370 (one core, GCC 16.2.1), complex float: median ns per transform [95\,\% CI], speedups of fastfft
 (paired), and the GCC trunk builds (\texttt{-std=c++26}): fastfft on C++26 \texttt{std::simd}, on
@@ -190,6 +238,15 @@ $2^{19}$ & \begin{tabular}[t]{@{}r@{}}905.3\,k\\{\scriptsize[901.0\,k, 908.7\,k]
 $2^{20}$ & \begin{tabular}[t]{@{}r@{}}2.628\,M\\{\scriptsize[2.584\,M, 2.658\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}4.592\,M\\{\scriptsize[4.558\,M, 4.639\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}4.816\,M\\{\scriptsize[4.789\,M, 4.842\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}1.75\\{\scriptsize[1.71, 1.78]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}1.84\\{\scriptsize[1.81, 1.85]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}2.679\,M\\{\scriptsize[2.656\,M, 2.691\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}2.495\,M\\{\scriptsize[2.489\,M, 2.513\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}2.541\,M\\{\scriptsize[2.531\,M, 2.551\,M]}\end{tabular}\\
 \bottomrule\end{tabular}\end{table}
 
+\begin{figure}[h]\centering\begin{tikzpicture}\begin{axis}[width=0.8\textwidth,height=62mm,xmode=log,log basis x=2,xtick={64,256,1024,4096,16384,65536,262144,1048576},xticklabels={$2^6$,$2^8$,$2^{10}$,$2^{12}$,$2^{14}$,$2^{16}$,$2^{18}$,$2^{20}$},xlabel={transform size $N$},ylabel={ns / $(N\log_2 N)$},grid=major,grid style={gray!25},legend style={font=\footnotesize,at={(0.5,1.03)},anchor=south,draw=none},legend columns=3,tick label style={font=\footnotesize}]
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-two-float-0.dat};\addlegendentry{fastfft}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-two-float-1.dat};\addlegendentry{SimdFFT}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-two-float-2.dat};\addlegendentry{FFTW}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-two-float-3.dat};\addlegendentry{C++26, trunk}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-two-float-4.dat};\addlegendentry{exp., trunk}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-two-float-5.dat};\addlegendentry{cx, trunk}
+\end{axis}\end{tikzpicture}\caption{Second host, complex float (Table~\ref{tab:two-float}). Time per transform divided by $N\log_2 N$ (lower is faster), error bars: 95\,\% CI of the median.}\label{fig:two-float}\end{figure}
+
 \begin{table}[h]\centering
 \caption{Second host, AMD Ryzen AI 9 HX 370 (one core, GCC 16.2.1), complex double: median ns per transform [95\,\% CI], speedups of fastfft
 (paired), and the GCC trunk builds (\texttt{-std=c++26}): fastfft on C++26 \texttt{std::simd}, on
@@ -212,3 +269,12 @@ $2^{18}$ & \begin{tabular}[t]{@{}r@{}}778.0\,k\\{\scriptsize[772.5\,k, 784.7\,k]
 $2^{19}$ & \begin{tabular}[t]{@{}r@{}}2.174\,M\\{\scriptsize[2.120\,M, 2.192\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}3.785\,M\\{\scriptsize[3.748\,M, 3.856\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}3.157\,M\\{\scriptsize[3.139\,M, 3.176\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}1.76\\{\scriptsize[1.72, 1.79]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}1.47\\{\scriptsize[1.44, 1.48]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}2.241\,M\\{\scriptsize[2.229\,M, 2.254\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}2.592\,M\\{\scriptsize[2.581\,M, 2.611\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}2.036\,M\\{\scriptsize[2.030\,M, 2.044\,M]}\end{tabular}\\
 $2^{20}$ & \begin{tabular}[t]{@{}r@{}}6.631\,M\\{\scriptsize[6.619\,M, 6.637\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}9.960\,M\\{\scriptsize[9.932\,M, 9.989\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}6.958\,M\\{\scriptsize[6.902\,M, 7.025\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}1.50\\{\scriptsize[1.50, 1.51]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}1.05\\{\scriptsize[1.05, 1.06]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}6.775\,M\\{\scriptsize[6.767\,M, 6.800\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}6.629\,M\\{\scriptsize[6.593\,M, 6.654\,M]}\end{tabular} & \begin{tabular}[t]{@{}r@{}}5.798\,M\\{\scriptsize[5.771\,M, 5.862\,M]}\end{tabular}\\
 \bottomrule\end{tabular}\end{table}
+
+\begin{figure}[h]\centering\begin{tikzpicture}\begin{axis}[width=0.8\textwidth,height=62mm,xmode=log,log basis x=2,xtick={64,256,1024,4096,16384,65536,262144,1048576},xticklabels={$2^6$,$2^8$,$2^{10}$,$2^{12}$,$2^{14}$,$2^{16}$,$2^{18}$,$2^{20}$},xlabel={transform size $N$},ylabel={ns / $(N\log_2 N)$},grid=major,grid style={gray!25},legend style={font=\footnotesize,at={(0.5,1.03)},anchor=south,draw=none},legend columns=3,tick label style={font=\footnotesize}]
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-two-double-0.dat};\addlegendentry{fastfft}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-two-double-1.dat};\addlegendentry{SimdFFT}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-two-double-2.dat};\addlegendentry{FFTW}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-two-double-3.dat};\addlegendentry{C++26, trunk}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-two-double-4.dat};\addlegendentry{exp., trunk}
+\addplot+[mark size=1.3pt,error bars/.cd,y dir=both,y explicit] table[x=n,y=y,y error plus=ep,y error minus=em]{data/plot-two-double-5.dat};\addlegendentry{cx, trunk}
+\end{axis}\end{tikzpicture}\caption{Second host, complex double (Table~\ref{tab:two-double}). Time per transform divided by $N\log_2 N$ (lower is faster), error bars: 95\,\% CI of the median.}\label{fig:two-double}\end{figure}

@@ -1,4 +1,4 @@
-# fastfft: a portable std::simd FFT, up to 3.4x faster than gnuradio4's
+# fastfft: a portable std::simd FFT for gnuradio4
 
 `include/fastfft/fft.hpp` is a single-header, power-of-two, complex forward FFT (float and double) written against
 `std::simd` (C++26, or `std::experimental::simd` before that), without ISA intrinsics. On one AVX-512 core it is 1.6–3.4x faster than
