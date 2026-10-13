@@ -1,0 +1,523 @@
+From 45c093ce5c3b8a80313a781aeb2938880a38cda1 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 13 Oct 2026 14:56:20 +0000
+Subject: [PATCH 1/3] feat(bench): opt-in robust statistics and interleaved
+ comparison groups
+
+Existing benchmarks print as before. Opting in gives:
+
+- `min_sample(d)`: calls per sample calibrated once so a sample lasts at least `d`, one warm-up sample discarded, times per call;
+- median with a distribution-free 95 % interval from order statistics (exact binomial ranks) and the relative MAD;
+- `compare<R>(name, cases, scale, minSample)`: R rounds, each sampling every case once in a freshly shuffled order, so drifts hit all cases alike;
+  returns per case the statistics above and the paired ratio to the first case (median of same-round ratios with its interval).
+
+```cpp
+const auto stats = ::benchmark::compare<40>("fft 1024", {{"SimdFFT", a}, {"StockhamFFT", b}}, 1024UZ, 5ms);
+const bool faster = stats[1].ratio_to_reference.ci_high < 1.0;
+```
+
+### Changes
+- `bench/benchmark.hpp`: `min_sample`, `compare`, `utils::median_ci_ranks`, `compute_robust_statistics`, `compute_ratio_statistics`
+- `bench/qa_benchmark.cpp`: ranks checked against an exact binomial CDF, MAD, paired ratios
+---
+ bench/CMakeLists.txt   |   7 ++
+ bench/benchmark.hpp    | 239 +++++++++++++++++++++++++++++++++++++++--
+ bench/qa_benchmark.cpp | 144 +++++++++++++++++++++++++
+ 3 files changed, 382 insertions(+), 8 deletions(-)
+ create mode 100644 bench/qa_benchmark.cpp
+
+diff --git a/bench/CMakeLists.txt b/bench/CMakeLists.txt
+index 71f0b5d..0c9b025 100644
+--- a/bench/CMakeLists.txt
++++ b/bench/CMakeLists.txt
+@@ -30,3 +30,10 @@ endfunction()
+ if(ENABLE_BENCHMARKS)
+   add_benchmark(bm_example)
+ endif()
++
++if(ENABLE_TESTING)
++  add_executable(qa_benchmark qa_benchmark.cpp)
++  append_compiler_flags(qa_benchmark)
++  target_link_libraries(qa_benchmark PRIVATE gnuradio4::gnuradio-options ut gnuradio4::ut-benchmark)
++  add_test(NAME qa_benchmark COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:qa_benchmark>)
++endif()
+diff --git a/bench/benchmark.hpp b/bench/benchmark.hpp
+index 84c2d89..60e5450 100644
+--- a/bench/benchmark.hpp
++++ b/bench/benchmark.hpp
+@@ -2,21 +2,28 @@
+ #define GNURADIO_BENCHMARK_HPP
+ 
+ #include <algorithm>
++#include <cassert>
+ #include <charconv>
+ #include <chrono>
+ #include <cmath>
+ #include <cstring>
+ #include <format>
++#include <functional>
++#include <initializer_list>
+ #include <iostream>
+ #include <map>
+ #include <mutex>
++#include <numbers>
+ #include <numeric>
+ #include <print>
++#include <random>
+ #include <ranges>
++#include <span>
+ #include <string>
+ #include <string_view>
+ #include <unordered_map>
+ #include <variant>
++#include <vector>
+ 
+ #include <boost/ut.hpp>
+ 
+@@ -480,7 +487,7 @@ struct StringHash {
+     }
+ };
+ 
+-using ResultMap = std::unordered_map<std::string, std::tuple<std::variant<std::monostate, long double, uint64_t, perf_sub_metric>, std::string, std::size_t>, StringHash, std::equal_to<>>;
++using ResultMap = std::unordered_map<std::string, std::tuple<std::variant<std::monostate, long double, uint64_t, perf_sub_metric, std::string>, std::string, std::size_t>, StringHash, std::equal_to<>>;
+ 
+ class results {
+     using EntryType = std::pair<std::string, ResultMap>;
+@@ -584,6 +591,69 @@ template<typename T>
+     return {*min, mean, stddev, median, *max};
+ }
+ 
++template<std::floating_point T>
++struct robust_statistics {
++    T median{std::numeric_limits<T>::quiet_NaN()};
++    T ci_low{std::numeric_limits<T>::quiet_NaN()};  // 95 % interval of the median
++    T ci_high{std::numeric_limits<T>::quiet_NaN()}; // 95 % interval of the median
++    T rel_mad{std::numeric_limits<T>::quiet_NaN()}; // median absolute deviation / median
++};
++
++template<std::floating_point T>
++[[nodiscard]] constexpr T median_of_sorted(std::span<const T> sorted) noexcept {
++    const std::size_t n = sorted.size();
++    if (n == 0) {
++        return std::numeric_limits<T>::quiet_NaN();
++    }
++    return n % 2 == 1 ? sorted[n / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
++}
++
++/**
++ * 1-based ranks {lower, upper} of the order statistics that bracket the median of n samples with
++ * at least the given confidence: the largest lower rank whose binomial(n, 1/2) tail does not
++ * exceed half the miss probability. Below n = 6 no rank qualifies, so the full range is returned.
++ */
++[[nodiscard]] inline std::pair<std::size_t, std::size_t> median_ci_ranks(std::size_t n, double confidence = 0.95) {
++    if (n == 0) {
++        return {0, 0};
++    }
++    const double tail      = 0.5 * (1.0 - confidence);
++    const double dn        = static_cast<double>(n);
++    double       cdf       = 0.0;
++    std::size_t  lowerRank = 1;
++    for (std::size_t k = 0; k < n; ++k) {
++        const double dk = static_cast<double>(k);
++        cdf += std::exp(std::lgamma(dn + 1.0) - std::lgamma(dk + 1.0) - std::lgamma(dn - dk + 1.0) - dn * std::numbers::ln2);
++        if (cdf > tail) {
++            break;
++        }
++        lowerRank = k + 1;
++    }
++    return {lowerRank, n + 1 - lowerRank};
++}
++
++template<std::floating_point T>
++[[nodiscard]] robust_statistics<T> compute_robust_statistics(std::vector<T> values) {
++    if (values.empty()) {
++        return {};
++    }
++    std::ranges::sort(values);
++    const T median         = median_of_sorted<T>(values);
++    const auto [low, high] = median_ci_ranks(values.size());
++    std::vector<T> deviations(values.size());
++    std::ranges::transform(values, deviations.begin(), [median](T v) { return std::abs(v - median); });
++    std::ranges::sort(deviations);
++    return {median, values[low - 1], values[high - 1], median_of_sorted<T>(deviations) / median};
++}
++
++template<std::floating_point T>
++[[nodiscard]] robust_statistics<T> compute_ratio_statistics(const std::vector<T>& numerator, const std::vector<T>& denominator) {
++    assert(numerator.size() == denominator.size());
++    std::vector<T> ratios(numerator.size());
++    std::ranges::transform(numerator, denominator, ratios.begin(), std::divides<>{});
++    return compute_robust_statistics(std::move(ratios));
++}
++
+ template<typename T>
+ concept Numeric = std::integral<T> || std::floating_point<T>;
+ 
+@@ -688,6 +758,47 @@ constexpr std::size_t argument_size() noexcept {
+     }
+ }
+ 
++namespace detail {
++
++using sample_clock = std::chrono::steady_clock;
++
++template<typename RunCalls>
++double time_sample(RunCalls& runCalls, std::size_t calls) {
++    const auto start = sample_clock::now();
++    runCalls(calls);
++    return std::chrono::duration<double>(sample_clock::now() - start).count();
++}
++
++template<typename RunCalls>
++std::size_t calibrate_calls(RunCalls& runCalls, std::chrono::nanoseconds minSample) {
++    const double minSampleSeconds = std::chrono::duration<double>(minSample).count();
++    std::size_t  calls            = 1;
++    while (time_sample(runCalls, calls) < minSampleSeconds) {
++        calls *= 2;
++    }
++    return calls;
++}
++
++inline std::string format_interval(const utils::robust_statistics<double>& stats, std::size_t digits) { return std::format("[{}, {}]", utils::to_si_prefix(stats.ci_low, "s", digits), utils::to_si_prefix(stats.ci_high, "s", digits)); }
++
++inline void add_sample_columns(ResultMap& map, const std::vector<double>& secondsPerCall, std::size_t calls, std::size_t nScaleResults, int requestedPrecision) {
++    const int precision                               = std::max(requestedPrecision, 2); // per-call times differ by percent, so one significant digit hides the interval
++    const auto [min, mean, stddev, unusedMedian, max] = utils::compute_statistics(secondsPerCall);
++    const auto robust                                 = utils::compute_robust_statistics(secondsPerCall);
++    const auto digits                                 = static_cast<std::size_t>(precision);
++    map.try_emplace("min", static_cast<long double>(min), "s", precision);
++    map.try_emplace("mean", static_cast<long double>(mean), "s", precision);
++    map.try_emplace("stddev", static_cast<long double>(stddev), "s", precision);
++    map.try_emplace("median", static_cast<long double>(robust.median), "s", precision);
++    map.try_emplace("median CI95", format_interval(robust, digits), "", 0);
++    map.try_emplace("rel MAD", std::format("{:.2f} %", 100.0 * robust.rel_mad), "", 0);
++    map.try_emplace("max", static_cast<long double>(max), "s", precision);
++    map.try_emplace("total time", static_cast<long double>(std::accumulate(secondsPerCall.begin(), secondsPerCall.end(), 0.0) * static_cast<double>(calls)), "s", precision);
++    map.try_emplace("ops/s", static_cast<long double>(nScaleResults) / static_cast<long double>(robust.median), "", std::max(1, precision));
++}
++
++} // namespace detail
++
+ template<fixed_string... meas_marker_names>
+ struct MarkerMap : const_key_map<time_point, meas_marker_names...> {};
+ 
+@@ -703,8 +814,38 @@ template<typename TestFunction, std::size_t N>
+ 
+ template<std::size_t N_ITERATIONS = 1LU, typename ResultType = results, fixed_string... meas_marker_names>
+ class benchmark : public ut::detail::test {
+-    std::size_t _n_scale_results;
+-    int         _precision = 0;
++    std::size_t              _n_scale_results;
++    int                      _precision = 0;
++    std::chrono::nanoseconds _min_sample{0};
++
++    void add_perf_metrics(ResultMap& resultMap, const PerformanceCounter& counter, double nOperations) const {
++        const perf_metric perf_data = counter.results();
++        resultMap.try_emplace("CPU cache misses", perf_data.cache, "", 0);
++        resultMap.try_emplace("CPU branch misses", perf_data.branch, "", 0);
++        resultMap.try_emplace("<CPU-I>", static_cast<double>(perf_data.instructions) / nOperations, "", std::max(1, _precision));
++        resultMap.try_emplace("CTX-SW", perf_data.ctx_switches, "", 0);
++    }
++
++    template<typename TestFunction>
++    void run_sampled(ResultMap& resultMap, TestFunction& callable) const {
++        const auto runCalls = [&callable](std::size_t calls) {
++            for (std::size_t i = 0; i < calls; ++i) {
++                callable();
++            }
++        };
++        const auto calls = detail::calibrate_calls(runCalls, _min_sample);
++        detail::time_sample(runCalls, calls); // warm-up sample, discarded
++
++        std::vector<double> secondsPerCall(N_ITERATIONS);
++        PerformanceCounter  execMetrics;
++        for (auto& seconds : secondsPerCall) {
++            seconds = detail::time_sample(runCalls, calls) / static_cast<double>(calls);
++        }
++        if (PerformanceCounter::available()) {
++            add_perf_metrics(resultMap, execMetrics, static_cast<double>(N_ITERATIONS * calls * _n_scale_results));
++        }
++        detail::add_sample_columns(resultMap, secondsPerCall, calls, _n_scale_results, _precision);
++    }
+ 
+ public:
+     benchmark() = delete;
+@@ -733,6 +874,15 @@ public:
+                 result_map.try_emplace("#N", std::monostate{}, "", 0);
+             }
+ 
++            if constexpr (std::invocable<TestFunction>) {
++                if (_min_sample.count() > 0) {
++                    run_sampled(result_map, _test);
++                    return;
++                }
++            } else if (_min_sample.count() > 0) {
++                throw std::invalid_argument("benchmark::min_sample is not supported for benchmarks with markers");
++            }
++
+             std::vector<time_point> stop_iter(N_ITERATIONS);
+             auto                    marker_iter = get_marker_array<TestFunction, N_ITERATIONS>();
+ 
+@@ -762,11 +912,7 @@ public:
+             // post-processing
+ 
+             if (PerformanceCounter::available()) {
+-                const perf_metric perf_data = execMetrics.results();
+-                result_map.try_emplace("CPU cache misses", perf_data.cache, "", 0);
+-                result_map.try_emplace("CPU branch misses", perf_data.branch, "", 0);
+-                result_map.try_emplace("<CPU-I>", static_cast<double>(perf_data.instructions) / static_cast<double>(N_ITERATIONS * _n_scale_results), "", std::max(1, _precision));
+-                result_map.try_emplace("CTX-SW", perf_data.ctx_switches, "", 0);
++                add_perf_metrics(result_map, execMetrics, static_cast<double>(N_ITERATIONS * _n_scale_results));
+             }
+             // not time-critical post-processing starts here
+             const auto        time_differences_ns = utils::diff<N_ITERATIONS, long double>(stop_iter, start);
+@@ -826,12 +972,87 @@ public:
+         return *this;
+     }
+ 
++    /**
++     * Opt in to robust statistics: N_ITERATIONS samples, each lasting at least minSample, are
++     * reported as time per call with the median, its 95 % interval and the relative MAD.
++     */
++    benchmark& min_sample(std::chrono::nanoseconds minSample) noexcept {
++        _min_sample = minSample;
++        return *this;
++    }
++
+     template<std::size_t N>
+     auto repeat(std::size_t n_scale_results = 1LU) {
+         return ::benchmark::benchmark<N, ResultType, meas_marker_names...>(this->name, n_scale_results);
+     }
+ };
+ 
++struct comparison_case {
++    std::string                      name;
++    std::function<void(std::size_t)> run_calls;
++
++    template<typename Callable>
++    requires std::invocable<Callable&>
++    comparison_case(std::string caseName, Callable callable)
++        : name(std::move(caseName)), run_calls([callable = std::move(callable)](std::size_t calls) mutable {
++              for (std::size_t i = 0; i < calls; ++i) {
++                  callable();
++              }
++          }) {}
++};
++
++struct case_statistics {
++    std::string                      name;
++    std::size_t                      calls_per_sample{};
++    std::vector<double>              seconds_per_call; // one entry per round
++    utils::robust_statistics<double> time;
++    utils::robust_statistics<double> ratio_to_reference; // same-round ratio to the first case
++};
++
++/**
++ * Measures the cases in ROUNDS rounds; each round times one sample of every case in a freshly
++ * shuffled order, so slow drifts hit all cases equally. The first case is the reference. A case
++ * beats the reference only if ratio_to_reference.ci_high < 1, and loses if ci_low > 1.
++ *
++ *   const auto stats = ::benchmark::compare<40>("fft 1024", {{"reference", [&] { a(); }}, {"candidate", [&] { b(); }}}, 1024);
++ */
++template<std::size_t ROUNDS, typename ResultType = results>
++requires(ROUNDS > 0)
++std::vector<case_statistics> compare(std::string_view name, std::initializer_list<comparison_case> cases, std::size_t n_scale_results = 1LU, std::chrono::nanoseconds minSample = std::chrono::milliseconds{5}) {
++    std::vector<case_statistics> statistics(cases.size());
++    std::vector<std::size_t>     order(cases.size());
++    std::ranges::copy(std::views::iota(std::size_t{0}, cases.size()), order.begin());
++    for (const auto index : order) {
++        const auto& testCase   = *(cases.begin() + static_cast<std::ptrdiff_t>(index));
++        auto&       entry      = statistics[index];
++        entry.name             = testCase.name;
++        entry.calls_per_sample = detail::calibrate_calls(testCase.run_calls, minSample);
++        entry.seconds_per_call.resize(ROUNDS);
++        detail::time_sample(testCase.run_calls, entry.calls_per_sample); // warm-up sample, discarded
++    }
++
++    std::mt19937_64 shuffler{0x6772'3472}; // fixed seed keeps the run order reproducible
++    for (std::size_t round = 0; round < ROUNDS; ++round) {
++        std::ranges::shuffle(order, shuffler);
++        for (const auto index : order) {
++            auto& entry                   = statistics[index];
++            entry.seconds_per_call[round] = detail::time_sample((cases.begin() + static_cast<std::ptrdiff_t>(index))->run_calls, entry.calls_per_sample) / static_cast<double>(entry.calls_per_sample);
++        }
++    }
++
++    for (auto& entry : statistics) {
++        entry.time               = utils::compute_robust_statistics(entry.seconds_per_call);
++        entry.ratio_to_reference = utils::compute_ratio_statistics(entry.seconds_per_call, statistics.front().seconds_per_call);
++
++        auto& resultMap = ResultType::add_result(std::format("{}: {}", name, entry.name));
++        resultMap.try_emplace("#N", ROUNDS, "", 0);
++        detail::add_sample_columns(resultMap, entry.seconds_per_call, entry.calls_per_sample, n_scale_results, 0);
++        resultMap.try_emplace("ratio", std::format("{:.3f}", entry.ratio_to_reference.median), "", 0);
++        resultMap.try_emplace("ratio CI95", std::format("[{:.3f}, {:.3f}]", entry.ratio_to_reference.ci_low, entry.ratio_to_reference.ci_high), "", 0);
++    }
++    return statistics;
++}
++
+ [[nodiscard]] auto operator""_benchmark(const char* name, std::size_t size) { return ::benchmark::benchmark<1LU>{{name, size}}; }
+ 
+ } // namespace benchmark
+@@ -936,6 +1157,8 @@ public:
+                 return std::format("{}", to_si_prefix(std::get<long double>(value), unit, digits));
+             } else if (std::holds_alternative<uint64_t>(value)) {
+                 return std::format("{}", to_si_prefix(std::get<uint64_t>(value), unit, digits));
++            } else if (std::holds_alternative<std::string>(value)) {
++                return std::get<std::string>(value);
+             } else if (std::holds_alternative<benchmark::perf_sub_metric>(value)) {
+                 const auto stat = std::get<benchmark::perf_sub_metric>(value);
+                 return std::format("{:>4} / {:>4} = {:4.1f}%", //
+diff --git a/bench/qa_benchmark.cpp b/bench/qa_benchmark.cpp
+new file mode 100644
+index 0000000..aa63168
+--- /dev/null
++++ b/bench/qa_benchmark.cpp
+@@ -0,0 +1,144 @@
++#include "benchmark.hpp"
++
++#include <array>
++#include <cmath>
++
++namespace {
++
++__extension__ using Count = unsigned __int128;
++
++// P(B <= k) * 2^n for B ~ binomial(n, 1/2), from Pascal's triangle in exact integers
++Count scaledBinomialCdf(std::size_t n, std::size_t k) {
++    std::vector<Count> row(n + 1, 0);
++    row[0] = 1;
++    for (std::size_t m = 1; m <= n; ++m) {
++        for (std::size_t j = m; j > 0; --j) {
++            row[j] += row[j - 1];
++        }
++    }
++    Count sum = 0;
++    for (std::size_t j = 0; j <= k; ++j) {
++        sum += row[j];
++    }
++    return sum;
++}
++
++bool tailAtMostHalfMiss(std::size_t n, std::size_t k) { return scaledBinomialCdf(n, k) * 40 <= (Count{1} << n); }
++
++} // namespace
++
++const boost::ut::suite<"benchmark statistics"> tests = [] {
++    using namespace boost::ut;
++    using namespace benchmark::utils;
++
++    "median of odd and even sample counts"_test = [] {
++        expect(eq(median_of_sorted<double>(std::array{1.0, 2.0, 7.0}), 2.0));
++        expect(eq(median_of_sorted<double>(std::array{1.0, 2.0, 3.0, 4.0}), 2.5));
++        expect(eq(median_of_sorted<double>(std::array{5.0}), 5.0));
++        expect(std::isnan(median_of_sorted<double>(std::span<const double>{})));
++    };
++
++    "median and relative MAD of an unsorted sample with an outlier"_test = [] {
++        const auto stats = compute_robust_statistics<double>({100.0, 3.0, 1.0, 4.0, 2.0});
++        expect(eq(stats.median, 3.0));
++        // deviations 2, 1, 0, 1, 97 have median 1
++        expect(eq(stats.rel_mad, 1.0 / 3.0));
++    };
++
++    "even sample count averages the middle pair for median and MAD"_test = [] {
++        const auto stats = compute_robust_statistics<double>({4.0, 1.0, 3.0, 2.0, 10.0, 12.0});
++        expect(eq(stats.median, 3.5));
++        // deviations 2.5, 0.5, 0.5, 1.5, 6.5, 8.5 have median (1.5 + 2.5) / 2
++        expect(eq(stats.rel_mad, 2.0 / 3.5));
++    };
++
++    "median interval ranks match the exact binomial tail"_test = [](std::size_t n) {
++        const auto [lower, upper] = median_ci_ranks(n);
++        expect(eq(lower + upper, n + 1));
++        expect(lower >= 1_u);
++        expect(tailAtMostHalfMiss(n, lower - 1)) << "lower rank must not exceed the tail budget";
++        expect(!tailAtMostHalfMiss(n, lower)) << "next rank would exceed the tail budget";
++    } | std::vector<std::size_t>{40, 120, 7, 41, 1000 / 10};
++
++    "median interval ranks for n = 40 and n = 120"_test = [] {
++        expect(eq(median_ci_ranks(40).first, 14UZ) and eq(median_ci_ranks(40).second, 27UZ));
++        expect(eq(median_ci_ranks(120).first, 49UZ) and eq(median_ci_ranks(120).second, 72UZ));
++    };
++
++    "median interval of a sample that is too small is its full range"_test = [] {
++        expect(eq(median_ci_ranks(1).first, 1UZ) and eq(median_ci_ranks(1).second, 1UZ));
++        expect(eq(median_ci_ranks(5).first, 1UZ) and eq(median_ci_ranks(5).second, 5UZ));
++        expect(eq(median_ci_ranks(0).first, 0UZ) and eq(median_ci_ranks(0).second, 0UZ));
++    };
++
++    "interval of the median is the pair of order statistics at the binomial ranks"_test = [] {
++        std::vector<double> values(40);
++        for (std::size_t i = 0; i < values.size(); ++i) {
++            values[i] = static_cast<double>((i * 7) % 40); // permutation of 0..39
++        }
++        const auto stats = compute_robust_statistics(values);
++        expect(eq(stats.median, 19.5));
++        expect(eq(stats.ci_low, 13.0));  // rank 14
++        expect(eq(stats.ci_high, 26.0)); // rank 27
++    };
++
++    "ratio statistics pair samples by round"_test = [] {
++        std::vector<double> reference(40);
++        std::vector<double> candidate(40);
++        for (std::size_t i = 0; i < reference.size(); ++i) {
++            reference[i] = 1.0 + static_cast<double>((i * 7) % 40);              // unordered, unrelated to the ratio order
++            candidate[i] = (0.5 + 0.01 * static_cast<double>(i)) * reference[i]; // ratio rises with the round
++        }
++        const auto stats = compute_ratio_statistics(candidate, reference);
++        expect(approx(stats.median, 0.5 + 0.01 * 19.5, 1e-12));
++        expect(approx(stats.ci_low, 0.5 + 0.01 * 13, 1e-12));
++        expect(approx(stats.ci_high, 0.5 + 0.01 * 26, 1e-12));
++    };
++
++    "ratio of identical samples is exactly one"_test = [] {
++        const std::vector<double> samples{3.0, 1.0, 2.0, 5.0, 4.0, 8.0, 7.0};
++        const auto                stats = compute_ratio_statistics(samples, samples);
++        expect(eq(stats.median, 1.0));
++        expect(eq(stats.ci_low, 1.0));
++        expect(eq(stats.ci_high, 1.0));
++        expect(eq(stats.rel_mad, 0.0));
++    };
++};
++
++const boost::ut::suite<"benchmark comparison group"> comparisonTests = [] {
++    using namespace boost::ut;
++
++    "every case gets one sample per round and the reference ratio is one"_test = [] {
++        std::size_t referenceCalls = 0;
++        std::size_t candidateCalls = 0;
++        const auto  stats          = ::benchmark::compare<12>("synthetic",
++                      {{"reference",
++                           [&] {
++                     ++referenceCalls;
++                     benchmark::force_to_memory(referenceCalls);
++                 }},
++                          {"candidate",
++                              [&] {
++                        ++candidateCalls;
++                        benchmark::force_to_memory(candidateCalls);
++                    }}},
++                      1, std::chrono::microseconds{200});
++
++        expect(eq(stats.size(), 2UZ));
++        for (const auto& entry : stats) {
++            expect(eq(entry.seconds_per_call.size(), 12UZ));
++            expect(entry.calls_per_sample >= 1_u);
++            expect(entry.time.median > 0.0_d);
++            expect(entry.time.ci_low <= entry.time.median);
++            expect(entry.time.median <= entry.time.ci_high);
++        }
++        expect(eq(stats[0].name, std::string{"reference"}));
++        expect(eq(stats[0].ratio_to_reference.median, 1.0));
++        expect(eq(stats[0].ratio_to_reference.ci_low, 1.0));
++        expect(eq(stats[0].ratio_to_reference.ci_high, 1.0));
++        expect(referenceCalls >= 13 * stats[0].calls_per_sample); // warm-up plus 12 rounds
++        expect(candidateCalls >= 13 * stats[1].calls_per_sample);
++    };
++};
++
++int main() {}
+-- 
+2.43.0
+
