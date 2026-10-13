@@ -28,6 +28,21 @@ CPU=${CPU:-$([ "$(nproc)" -gt 2 ] && echo 2 || echo 0)}
 PIN=()
 command -v taskset >/dev/null && PIN=(taskset -c "$CPU")
 
+# fail before touching OUT when the toolchain is incomplete
+missing=()
+for tool in cmake git python3 "${CXX:-c++}"; do
+    command -v "$tool" >/dev/null || missing+=("$tool")
+done
+if [ ${#missing[@]} -gt 0 ]; then
+    echo "missing: ${missing[*]}; gnuradio4 needs CMake >= 3.27 and GCC >= 14 or Clang >= 18 (on EL9 e.g. 'pip install --user cmake' and 'scl enable gcc-toolset-14 bash', or set CXX)" >&2
+    exit 1
+fi
+CXX_VERSION=$("${CXX:-c++}" --version | head -1)
+if [[ "$CXX_VERSION" =~ (GCC|g\+\+|c\+\+).*\ ([0-9]+)\.[0-9]+\.[0-9]+ ]] && [ "${BASH_REMATCH[2]}" -lt 14 ]; then
+    echo "$CXX_VERSION is too old: gnuradio4 needs GCC >= 14 (on EL9 e.g. 'scl enable gcc-toolset-14 bash', or set CXX)" >&2
+    exit 1
+fi
+
 [ -d "$GR4_DIR/.git" ] || "$ROOT/gr4/apply.sh" "$GR4_DIR"
 
 CMAKE_ARGS=(-DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD="$CXX_STANDARD"
@@ -42,7 +57,7 @@ mkdir -p "$OUT"
 {
     echo "date: $(date -Iseconds)"
     echo "gnuradio4: $(git -C "$GR4_DIR" describe --always --dirty) ($(git -C "$GR4_DIR" log -1 --format=%s))"
-    echo "compiler: $("${CXX:-c++}" --version | head -1)"
+    echo "compiler: $CXX_VERSION"
     echo "c++ standard: $CXX_STANDARD"
     echo "targets: $TARGETS"
     echo "pinned: ${PIN[*]:-no}"
