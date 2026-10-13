@@ -64,6 +64,10 @@ for target in $TARGETS; do
     done
     echo "== $target: running bm_fft (BM_FFT_ROUNDS=$BM_FFT_ROUNDS BM_FFT_MAX_LOG2=$BM_FFT_MAX_LOG2 BM_FFT_MIN_SAMPLE_MS=$BM_FFT_MIN_SAMPLE_MS)"
     "${PIN[@]}" "$(find "$build" -name bm_fft -type f -executable | head -1)" 2>&1 | sed 's/\x1b\[[0-9;]*m//g' > "$OUT/bm-$target.txt" || true
+    if grep -q 'relative L2 error' "$OUT/bm-$target.txt"; then
+        echo "!! $target: some cases failed the accuracy check and were left out of timing and routes:"
+        grep 'relative L2 error' "$OUT/bm-$target.txt" | sort -u
+    fi
     grep -E '^(// (Float|Double)|inline constexpr std::array|    FFTRoute|\};)' "$OUT/bm-$target.txt" > "$OUT/routes-$target.txt" || true
 done
 
