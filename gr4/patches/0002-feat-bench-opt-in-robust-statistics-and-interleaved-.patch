@@ -1,7 +1,7 @@
-From e16105e36c4b35bfcd363b8b852ccb8de84bcb9f Mon Sep 17 00:00:00 2001
+From 4292b51f2ddd930bbb99a46aff2dff8f8a73c375 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 13 Oct 2026 14:56:20 +0000
-Subject: [PATCH 02/11] feat(bench): opt-in robust statistics and interleaved
+Subject: [PATCH 2/7] feat(bench): opt-in robust statistics and interleaved
  comparison groups
 
 Existing benchmarks print as before. Opting in gives:

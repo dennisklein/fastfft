@@ -1,27 +1,46 @@
-From 23bb3dbddd89a73c2b13991d239ae0e0de938157 Mon Sep 17 00:00:00 2001
+From e32d81de71f86b0f22713db8ec308bd1543a6934 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
-Date: Tue, 13 Oct 2026 15:18:29 +0000
-Subject: [PATCH 05/11] perf(algorithm): bm_fft compares FFT kernels and plans
+Date: Tue, 13 Oct 2026 17:19:38 +0000
+Subject: [PATCH 6/7] perf(algorithm): bm_fft compares FFT kernels and plans
  per size and prints this host's route table
 
 Every (type, N) is one interleaved comparison group: `SimdFFT` (reference), `StockhamFFT` with its default and alternative radix plans, the dispatcher `FFT`, each accuracy-checked against a long-double DFT before timing, in `hot` (one frame) and `stream` (frames cycling through 2^16 points) modes.
-The end of the run prints the `constexpr` route tables this host would choose: a candidate replaces the current route only when its paired ratio's 95 % interval lies entirely below.
+Before the tables the run prints the `FFTRoutes.hpp` tables this host would choose: a candidate replaces the current route only when its paired ratio's 95 % interval lies entirely below.
+Benchmarks keep `-march=native` unless the configuration already sets `-march`, so one host can measure every vector width it supports.
 
 ```bash
+cmake -DCMAKE_CXX_FLAGS=-march=x86-64-v3 ...   # 256-bit table on an AVX-512 host
 taskset -c 2 env BM_FFT_ROUNDS=40 BM_FFT_MAX_LOG2=20 BM_FFT_MIN_SAMPLE_MS=5 ./bm_fft
 ```
 
 ### Changes
 - `bm_fft.cpp`: rewritten on `benchmark::compare`; `BM_FFT_ROUNDS`, `BM_FFT_MAX_LOG2`, `BM_FFT_MIN_SAMPLE_MS`; header line with compiler, simd backend, width and CPU
+- `algorithm/benchmarks/CMakeLists.txt`, `bench/CMakeLists.txt`: a configured `-march` wins over `-march=native`
 ---
- algorithm/benchmarks/bm_fft.cpp | 505 ++++++++++++++++++++++++++++----
- 1 file changed, 452 insertions(+), 53 deletions(-)
+ algorithm/benchmarks/CMakeLists.txt |   3 +
+ algorithm/benchmarks/bm_fft.cpp     | 480 +++++++++++++++++++++++++---
+ bench/CMakeLists.txt                |   2 +-
+ 3 files changed, 431 insertions(+), 54 deletions(-)
 
+diff --git a/algorithm/benchmarks/CMakeLists.txt b/algorithm/benchmarks/CMakeLists.txt
+index a6a64b3..814dedd 100644
+--- a/algorithm/benchmarks/CMakeLists.txt
++++ b/algorithm/benchmarks/CMakeLists.txt
+@@ -20,6 +20,9 @@ function(add_gr_benchmark BM_NAME)
+       target_compile_options(${BM_NAME} PRIVATE -mrelaxed-simd)
+       target_link_options(${BM_NAME} PRIVATE -mrelaxed-simd)
+     endif()
++  elseif(CMAKE_CXX_FLAGS MATCHES "-march=")
++    # a configured target (e.g. a distribution's baseline) is measured as built, not as this host's best
++    target_compile_options(${BM_NAME} PRIVATE -O2)
+   else()
+     target_compile_options(${BM_NAME} PRIVATE -O2 -march=native)
+   endif()
 diff --git a/algorithm/benchmarks/bm_fft.cpp b/algorithm/benchmarks/bm_fft.cpp
-index 093269c..e751211 100644
+index 093269c..202ccc6 100644
 --- a/algorithm/benchmarks/bm_fft.cpp
 +++ b/algorithm/benchmarks/bm_fft.cpp
-@@ -1,86 +1,485 @@
+@@ -1,86 +1,460 @@
 +// Forward complex FFT: SimdFFT (the old route) against StockhamFFT plans, experimental variants and the FFT dispatcher; hot and stream cache modes; prints a route table for this host.
 +// BM_FFT_ROUNDS (default 8; rounded up to 3, 8, 20, 40 or 100), BM_FFT_MAX_LOG2 (default 16), BM_FFT_MIN_SAMPLE_MS (default 1): timed rounds, largest N = 2^x, minimum duration of one sample.
 +// Tuning: taskset -c 2 env BM_FFT_ROUNDS=40 BM_FFT_MAX_LOG2=20 BM_FFT_MIN_SAMPLE_MS=5 ./bm_fft
@@ -55,12 +74,6 @@ index 093269c..e751211 100644
 +
 +#if __has_include("StockhamFFTSplit.hpp")
 +#include "StockhamFFTSplit.hpp"
-+#endif
-+#if __has_include("StockhamFFTBatch.hpp")
-+#include "StockhamFFTBatch.hpp"
-+#endif
-+#if __has_include("StockhamFFTFourStep.hpp")
-+#include "StockhamFFTFourStep.hpp"
 +#endif
 +
 +namespace {
@@ -113,18 +126,13 @@ index 093269c..e751211 100644
 +    std::optional<FFTKernel>                                              kernel; // empty: not a choice of the route table
 +    std::vector<std::size_t>                                              plan;   // StockhamFFT pass radices
 +    bool                                                                  isDefaultPlan{false};
-+    bool                                                                  batch{false}; // takes all frames of the buffer in one call
 +    std::function<void(std::span<const std::byte>, std::span<std::byte>)> run;
 +};
 +
 +template<typename T>
 +void apply(const Candidate& candidate, std::span<const std::complex<T>> in, std::span<std::complex<T>> out, std::size_t N) {
-+    const auto bytesIn  = std::as_bytes(in);
-+    const auto bytesOut = std::as_writable_bytes(out);
-+    if (candidate.batch) {
-+        candidate.run(bytesIn, bytesOut);
-+        return;
-+    }
++    const auto            bytesIn     = std::as_bytes(in);
++    const auto            bytesOut    = std::as_writable_bytes(out);
 +    constexpr std::size_t kPointBytes = sizeof(std::complex<T>);
 +    for (std::size_t offset = 0UZ; offset < in.size(); offset += N) {
 +        candidate.run(bytesIn.subspan(offset * kPointBytes, N * kPointBytes), bytesOut.subspan(offset * kPointBytes, N * kPointBytes));
@@ -175,9 +183,8 @@ index 093269c..e751211 100644
 +            if (isValid(plan) && seen.insert(plan).second) {
 +                splits.push_back(plan);
 +            }
-         }
-     }
--    return signal;
++        }
++    }
 +
 +    std::vector<Plan> chosen;
 +    for (std::size_t i = 0UZ; chosen.size() < kMaxPlans && (i < reorderings.size() || i < splits.size()); ++i) {
@@ -188,11 +195,9 @@ index 093269c..e751211 100644
 +        }
 +    }
 +    return chosen;
- }
- 
- template<typename T>
--struct FFTAlgoPrecision {
--    using type = T;
++}
++
++template<typename T>
 +std::vector<Candidate> makeCandidates(std::size_t N) {
 +    std::vector<Candidate> candidates;
 +    if (std::has_single_bit(N)) {
@@ -216,20 +221,6 @@ index 093269c..e751211 100644
 +            auto kernel = std::make_shared<StockhamFFTSplit<T>>();
 +            kernel->resize(N);
 +            candidates.push_back({.name = "Split", .run = forwardOf<T>(kernel)});
-+        }
-+#endif
-+#if __has_include("StockhamFFTBatch.hpp")
-+        {
-+            auto kernel = std::make_shared<StockhamFFTBatch<T>>();
-+            kernel->resize(N);
-+            candidates.push_back({.name = "Batch", .batch = true, .run = forwardOf<T>(kernel)});
-+        }
-+#endif
-+#if __has_include("StockhamFFTFourStep.hpp")
-+        if (N >= StockhamFFTFourStep<T>::kMinSize) {
-+            auto kernel = std::make_shared<StockhamFFTFourStep<T>>();
-+            kernel->resize(N);
-+            candidates.push_back({.name = "FourStep", .run = forwardOf<T>(kernel)});
 +        }
 +#endif
 +    }
@@ -280,12 +271,15 @@ index 093269c..e751211 100644
 +                spectrum[start + j]        = u + v;
 +                spectrum[start + j + half] = u - v;
 +            }
-+        }
-+    }
+         }
+     }
+-    return signal;
 +    return spectrum;
-+}
-+
-+template<typename T>
+ }
+ 
+ template<typename T>
+-struct FFTAlgoPrecision {
+-    using type = T;
 +long double relativeL2Error(std::span<const std::complex<T>> got, const std::vector<std::complex<long double>>& reference) {
 +    long double errorSum = 0.0L;
 +    long double normSum  = 0.0L;
@@ -346,7 +340,10 @@ index 093269c..e751211 100644
 +    const FFTRoute                 current     = fftRoute<T>(N);
 +    const std::vector<std::size_t> currentPlan = current.plan.empty() ? StockhamFFT<T>::defaultPlan(N) : std::vector<std::size_t>(current.plan.begin(), current.plan.end());
 +    const auto                     isCurrent   = [&](const Candidate& c) { return c.kernel == current.kernel && (current.kernel == FFTKernel::simdFft || c.plan == currentPlan); };
-+
+ 
+-    using PrecisionType = std::remove_cv_t<typename FFTAlgoPrecision<T>::type>;
+-    using OutputType    = std::complex<PrecisionType>;
+-    using FFTAlgo       = Algorithm<T, OutputType>;
 +    const Measured* best = nullptr;
 +    for (const auto& entry : measured) {
 +        if (isCurrent(*entry.candidate)) {
@@ -367,12 +364,19 @@ index 093269c..e751211 100644
 +    }
 +    return RouteChoice{*winner->candidate->kernel, winner->candidate->isDefaultPlan ? std::vector<std::size_t>{} : winner->candidate->plan};
 +}
-+
+ 
+-    for (std::size_t N : {512UZ, 1024UZ, 8192UZ, 65536UZ, 1009UZ /* prime */}) {
+-        constexpr int         nRepetitions{1000};
+-        constexpr std::size_t binnedFrequency{5UZ};
 +template<typename T>
 +constexpr std::string_view typeLabel() {
 +    return std::is_same_v<T, float> ? "Float" : "Double";
 +}
-+
+ 
+-        auto              templateName = [](std::string_view typeName) { return std::string(typeName.substr(0, typeName.find('<'))); };
+-        const std::string algoName     = templateName(gr::meta::type_name<FFTAlgo>());
+-        const std::string bmName       = std::format("{:21} - {:22} N = {:5}", algoName, type_name<T>(), N);
+-        const std::size_t scaling      = static_cast<std::size_t>(static_cast<double>(N) * std::log(static_cast<double>(N)));
 +template<typename T>
 +void printRoutes(const std::vector<std::pair<std::size_t, RouteChoice>>& choices) {
 +    if (choices.empty()) {
@@ -381,9 +385,10 @@ index 093269c..e751211 100644
 +    constexpr std::size_t W = detail::StockhamKernel<T>::kNativeLanes;
 +    std::println("\n// {}, W = {}, measured for N = 2^{} .. 2^{} in stream mode", typeLabel<T>(), W, choices.front().first, choices.back().first);
  
--    using PrecisionType = std::remove_cv_t<typename FFTAlgoPrecision<T>::type>;
--    using OutputType    = std::complex<PrecisionType>;
--    using FFTAlgo       = Algorithm<T, OutputType>;
+-        try {
+-            std::vector<T, gr::allocator::Aligned<T>> signal = generateSinSample<T>(N, 1., static_cast<double>(binnedFrequency) / static_cast<double>(N), 1.);
+-            FFTAlgo                                   fft;
+-            auto                                      output = fft.compute(signal); // warm up cache/twiddlefactors
 +    struct Entry {
 +        std::size_t maxLog2N;
 +        RouteChoice choice;
@@ -396,11 +401,12 @@ index 093269c..e751211 100644
 +            entries.push_back({log2N, choice});
 +        }
 +    }
++    if (!entries.back().choice.plan.empty()) {
++        entries.push_back({0UZ, RouteChoice{.kernel = FFTKernel::stockham}});
++    }
 +    entries.back().maxLog2N = std::numeric_limits<std::size_t>::digits;
  
--    for (std::size_t N : {512UZ, 1024UZ, 8192UZ, 65536UZ, 1009UZ /* prime */}) {
--        constexpr int         nRepetitions{1000};
--        constexpr std::size_t binnedFrequency{5UZ};
+-            ::benchmark::benchmark<nRepetitions>(std::string_view(bmName), scaling) = [&fft, &signal, &output] { output = fft.compute(signal); };
 +    std::string table;
 +    std::size_t planIndex = 0UZ;
 +    for (const auto& entry : entries) {
@@ -414,18 +420,14 @@ index 093269c..e751211 100644
 +            for (const std::size_t radix : entry.choice.plan) {
 +                radices += std::format("{}{}UZ", radices.empty() ? "" : ", ", radix);
 +            }
-+            const std::string name = std::format("kPlan{}{}", typeLabel<T>(), planIndex++);
++            const std::string name = std::format("kPlan{}{}Bit{}", typeLabel<T>(), W * sizeof(T) * 8UZ, planIndex++);
 +            std::println("inline constexpr std::array {}{{{}}};", name, radices);
 +            table += std::format("    FFTRoute{{.maxLog2N = {}, .kernel = FFTKernel::stockham, .plan = {}}},\n", maxLog2N, name);
 +        }
 +    }
 +    std::println("inline constexpr std::array kFFTRoutes{}{}Bit{{\n{}}};", typeLabel<T>(), W * sizeof(T) * 8UZ, table);
 +}
- 
--        auto              templateName = [](std::string_view typeName) { return std::string(typeName.substr(0, typeName.find('<'))); };
--        const std::string algoName     = templateName(gr::meta::type_name<FFTAlgo>());
--        const std::string bmName       = std::format("{:21} - {:22} N = {:5}", algoName, type_name<T>(), N);
--        const std::size_t scaling      = static_cast<std::size_t>(static_cast<double>(N) * std::log(static_cast<double>(N)));
++
 +std::string cpuModel() {
 +    std::ifstream cpuinfo("/proc/cpuinfo");
 +    for (std::string line; std::getline(cpuinfo, line);) {
@@ -436,11 +438,7 @@ index 093269c..e751211 100644
 +    }
 +    return "unknown";
 +}
- 
--        try {
--            std::vector<T, gr::allocator::Aligned<T>> signal = generateSinSample<T>(N, 1., static_cast<double>(binnedFrequency) / static_cast<double>(N), 1.);
--            FFTAlgo                                   fft;
--            auto                                      output = fft.compute(signal); // warm up cache/twiddlefactors
++
 +void printHeader() {
 +#if defined(__clang__)
 +    constexpr std::string_view compiler = "clang";
@@ -459,8 +457,7 @@ index 093269c..e751211 100644
 +    std::println("cpu: {}", cpuModel());
 +    std::println("ops/s are scaled with 5 N log2(N); stream cases process {} points per call, hot cases one frame", kStreamPoints);
 +}
- 
--            ::benchmark::benchmark<nRepetitions>(std::string_view(bmName), scaling) = [&fft, &signal, &output] { output = fft.compute(signal); };
++
 +template<typename T>
 +void sweepSize(std::size_t N, const Settings& settings, std::vector<std::pair<std::size_t, RouteChoice>>& routeChoices) {
 +    using namespace boost::ut;
@@ -473,7 +470,7 @@ index 093269c..e751211 100644
 +        value = {distribution(generator), distribution(generator)};
 +    }
 +
-+    // frame 0 and the last frame: a batch kernel must handle every frame, not only the first
++    // frame 0 and the last frame: every frame of the buffer is transformed, not only the first
 +    const auto        frameOf    = [&](const Buffer<T>& buffer, std::size_t frame) { return std::span<const std::complex<T>>(buffer).subspan(frame * N, N); };
 +    const auto        reference0 = referenceSpectrum<T>(frameOf(input, 0UZ));
 +    const auto        referenceN = referenceSpectrum<T>(frameOf(input, frames - 1UZ));
@@ -505,9 +502,6 @@ index 093269c..e751211 100644
 +        Cases                         cases;
 +        std::vector<const Candidate*> timed;
 +        for (const Candidate* candidate : accurate) {
-+            if (mode == Mode::hot && candidate->batch) {
-+                continue;
-+            }
 +            timed.push_back(candidate);
 +            cases.emplace_back(candidate->name, [candidate, N, points, &input, &output] { apply<T>(*candidate, std::span<const std::complex<T>>(input).first(points), std::span<std::complex<T>>(output).first(points), N); });
 +        }
@@ -560,6 +554,19 @@ index 093269c..e751211 100644
  };
  
  int main() { /* not needed by the UT framework */ }
+diff --git a/bench/CMakeLists.txt b/bench/CMakeLists.txt
+index 0c9b025..ca98e04 100644
+--- a/bench/CMakeLists.txt
++++ b/bench/CMakeLists.txt
+@@ -7,7 +7,7 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/benchmark.hpp DESTINATION ${CMAKE_INST
+ 
+ function(append_compiler_flags TARGET_NAME)
+   set(FLAGS_COMMON -Wall)
+-  if(EMSCRIPTEN)
++  if(EMSCRIPTEN OR CMAKE_CXX_FLAGS MATCHES "-march=")
+     set(FLAGS_SPECIAL "")
+   else()
+     set(FLAGS_SPECIAL -march=native)
 -- 
 2.43.0
 

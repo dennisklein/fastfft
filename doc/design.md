@@ -206,8 +206,7 @@ Renaming `SimdFFT` itself (to `PffftFFT` or similar) would make the pair symmetr
 
 ## 9 · Branch layout and next steps
 
-The `gr4/` directory mirrors gnuradio4's tree: every file there is a new or replaced gnuradio4 file at the same path.
-A pinned gnuradio4 revision and one script apply it, build, test and benchmark.
+`gr4/patches/` is the series as `git format-patch` output against the gnuradio4 revision pinned in `gr4/REVISION`; `gr4/apply.sh` clones and applies it.
 The gr4-bound commits are prepared for Dennis to sign off (`git commit -s`), one per change scenario, with no assistant trailer.
 
 1. Agree on this design (name decided: `StockhamFFT`).
@@ -216,7 +215,29 @@ The gr4-bound commits are prepared for Dennis to sign off (`git commit -s`), one
 4. Measure V6 plans at W = 4, 8, 16 on both hosts; first switch tables.
 5. V2, then V3, then V5, each kept only if the benchmark shows a gain outside the noise.
 
-## 10 · References
+## 10 · Measured outcomes (Xeon @ 2.1 GHz AVX-512 VM, GCC 15.3, 2026-10-13)
+
+Run 2 of `bm_fft` (stream mode, 40 interleaved rounds, 5 ms samples) at `-march=x86-64`, `x86-64-v3` and `native`, plus the C++26 path on GCC trunk; raw output in `results/xeon-20261013/run2/`.
+Time of the best StockhamFFT plan relative to `SimdFFT`, range over N = 2^6 .. 2^20:
+
+| target | float | double |
+| --- | ---: | ---: |
+| 128 bit (SSE2) | 0.31 – 0.81 | 0.57 – 0.91 |
+| 256 bit (AVX2) | 0.44 – 0.77 | 0.62 – 1.00 |
+| 512 bit (AVX-512) | 0.32 – 0.65 | 0.54 – 0.80 |
+| 512 bit, C++26 `std::simd` | 0.34 – 0.66 | 0.56 – 0.78 |
+
+What the measurements decided:
+
+- **V1 + V6** win everywhere measured; the route tables in `FFTRoutes.hpp` are this run's `bm_fft` output, so `FFT` never routes to `SimdFFT` on this host.
+  The earlier 128-bit rule (SimdFFT above 2^14, HX 370) predates the two fixes below and has to be re-measured there.
+- **V2 split** beats the best interleaved plan only at 128 bit for N ≥ 2^15 (float 0.52–0.65, double 0.68–0.81), and loses at small N and at 512 bit; it stays next to the benchmark, not routed.
+- **V3 batch** loses almost everywhere (up to 3.6× slower than V1): the in-register transpose of W frames costs more than the shuffles it saves. Dropped.
+- **V5 four-step** never beats the best V1 plan up to 2^20. Dropped; it may return above 2^20.
+- Two causes of slow double code, both fixed in the StockhamFFT commit: gr4's Release `-O2` keeps fixed-count loops rolled (`#pragma GCC unroll`), and at two lanes the 4-scalar bridge vector is not trivially copyable, so swaps went through the stack.
+- The accuracy gate found an upstream bug: every non-power-of-two `FFT` (Bluestein) was wrong; fixed with tests as the first commit.
+
+## 11 · References
 
 1. J. W. Cooley and J. W. Tukey, "An algorithm for the machine calculation of complex Fourier series," *Math. Comput.*, vol. 19, pp. 297–301, 1965.
 2. T. G. Stockham, "High-speed convolution and correlation," in *Proc. AFIPS Spring Joint Comput. Conf.*, 1966, pp. 229–233.

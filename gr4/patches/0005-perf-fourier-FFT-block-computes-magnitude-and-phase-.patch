@@ -1,8 +1,8 @@
-From 77f3503306da1eaf3917ffb467dc112f52b70416 Mon Sep 17 00:00:00 2001
+From 08bb4a551e6155da5642438f71577919de3249b8 Mon Sep 17 00:00:00 2001
 From: Dennis Klein <d.klein@gsi.de>
 Date: Sun, 11 Oct 2026 17:24:33 +0000
-Subject: [PATCH 04/11] perf(fourier): FFT block computes magnitude and phase
- in one pass
+Subject: [PATCH 5/7] perf(fourier): FFT block computes magnitude and phase in
+ one pass
 
 The FFT block transforms into its preallocated `_outData` and fills `_magnitudeSpectrum` and `_phaseSpectrum` in one loop, writing each bin straight to its fftshifted position.
 Results equal `computeMagnitudeSpectrum`/`computePhaseSpectrum` (unchanged `qa_FFT`); the per-frame output allocation, the two spectrum temporaries and the two rotations go away.

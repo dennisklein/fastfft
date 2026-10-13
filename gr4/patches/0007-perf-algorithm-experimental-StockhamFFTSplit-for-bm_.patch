@@ -1,20 +1,28 @@
-From 0d5c9772a201311ef03dc18de0724af46d9ae552 Mon Sep 17 00:00:00 2001
+From e506afc829bfb14f578f61789612b7f6bea1edea Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
-Date: Tue, 13 Oct 2026 15:18:48 +0000
-Subject: [PATCH 06/11] perf(algorithm): experimental StockhamFFTSplit (split
- re/im blocks inside) for bm_fft
+Date: Tue, 13 Oct 2026 17:19:38 +0000
+Subject: [PATCH 7/7] perf(algorithm): experimental StockhamFFTSplit for bm_fft
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
+Same Stockham passes, but each pass works on split real/imaginary blocks, so butterflies need no re/im swaps; interleaved input and output are converted at the ends.
+`bm_fft` times it beside `StockhamFFT` when the header is present.
+At 128-bit vectors and N >= 2^15 it beats the best interleaved plan (stream mode, Xeon VM, SSE2: float 0.52–0.65 vs 0.62–0.81 of `SimdFFT`, double 0.68–0.81 vs 0.79–0.91); it loses at small N and at 512-bit vectors, so it is not routed.
+
+### Changes
+- `algorithm/benchmarks/StockhamFFTSplit.hpp`: kernel, kept next to the benchmark until a route needs it
 ---
- algorithm/benchmarks/StockhamFFTSplit.hpp | 398 ++++++++++++++++++++++
- 1 file changed, 398 insertions(+)
+ algorithm/benchmarks/StockhamFFTSplit.hpp | 408 ++++++++++++++++++++++
+ 1 file changed, 408 insertions(+)
  create mode 100644 algorithm/benchmarks/StockhamFFTSplit.hpp
 
 diff --git a/algorithm/benchmarks/StockhamFFTSplit.hpp b/algorithm/benchmarks/StockhamFFTSplit.hpp
 new file mode 100644
-index 0000000..5d40c31
+index 0000000..f0dcd89
 --- /dev/null
 +++ b/algorithm/benchmarks/StockhamFFTSplit.hpp
-@@ -0,0 +1,398 @@
+@@ -0,0 +1,408 @@
 +#ifndef GNURADIO_ALGORITHM_STOCKHAMFFTSPLIT_HPP
 +#define GNURADIO_ALGORITHM_STOCKHAMFFTSPLIT_HPP
 +
@@ -182,6 +190,7 @@ index 0000000..5d40c31
 +    [[gnu::always_inline]] static void transpose(V* v) {
 +        for (std::size_t round = 0UZ; round < static_cast<std::size_t>(std::countr_zero(radix)); ++round) {
 +            V shuffled[radix];
++#pragma GCC unroll 16
 +            for (std::size_t u = 0UZ; u < radix / 2UZ; ++u) {
 +                shuffled[2 * u]     = zipLow(v[u], v[u + radix / 2UZ]);
 +                shuffled[2 * u + 1] = zipHigh(v[u], v[u + radix / 2UZ]);
@@ -267,6 +276,7 @@ index 0000000..5d40c31
 +            _passes.push_back({n, s, radix, _twiddles.size()});
 +            if (s == 1UZ) { // per group of _lanes butterflies, for k = 1..radix-1: _lanes real parts, then _lanes imaginary parts
 +                for (std::size_t p0 = 0UZ; p0 < m; p0 += _lanes) {
++#pragma GCC unroll 16
 +                    for (std::size_t k = 1UZ; k < radix; ++k) {
 +                        for (std::size_t p = p0; p < p0 + _lanes; ++p) {
 +                            _twiddles.push_back(static_cast<T>(twiddle(k * p, n).real()));
@@ -278,6 +288,7 @@ index 0000000..5d40c31
 +                }
 +            } else if (m > 1UZ) { // per butterfly p, for k = 1..radix-1: (re, im), broadcast at use
 +                for (std::size_t p = 0UZ; p < m; ++p) {
++#pragma GCC unroll 16
 +                    for (std::size_t k = 1UZ; k < radix; ++k) {
 +                        const auto w = twiddle(k * p, n);
 +                        _twiddles.insert(_twiddles.end(), {static_cast<T>(w.real()), static_cast<T>(w.imag())});
@@ -341,6 +352,7 @@ index 0000000..5d40c31
 +        const T*              t                      = _twiddles.data() + pass.twiddleOffset;
 +        for (std::size_t p0 = 0UZ; p0 < m; p0 += W, t += kTwiddleValuesPerGroup) {
 +            Complex a[radix], o[radix];
++#pragma GCC unroll 16
 +            for (std::size_t k = 0UZ; k < radix; ++k) {
 +                a[k] = Kernel::loadInterleaved(x + 2 * (p0 + k * m));
 +            }
@@ -348,6 +360,7 @@ index 0000000..5d40c31
 +            TVector re[radix], im[radix];
 +            re[0] = o[0].re;
 +            im[0] = o[0].im;
++#pragma GCC unroll 16
 +            for (std::size_t k = 1UZ; k < radix; ++k) {
 +                const Complex product = Kernel::multiply(o[k], Kernel::load(t + 2 * W * (k - 1)), Kernel::load(t + 2 * W * (k - 1) + W));
 +                re[k]                 = product.re;
@@ -355,6 +368,7 @@ index 0000000..5d40c31
 +            }
 +            Kernel::template transpose<radix>(re);
 +            Kernel::template transpose<radix>(im);
++#pragma GCC unroll 16
 +            for (std::size_t i = 0UZ; i < radix; ++i) {
 +                Kernel::storeSplit({re[i], im[i]}, y + 2 * (radix * p0 + W * i));
 +            }
@@ -387,20 +401,24 @@ index 0000000..5d40c31
 +            T*       yp = y + 2 * s * radix * p;
 +            for (std::size_t q = 0UZ; q < s; q += W) {
 +                Complex a[radix], o[radix];
++#pragma GCC unroll 16
 +                for (std::size_t k = 0UZ; k < radix; ++k) {
 +                    a[k] = Kernel::loadSplit(xp + 2 * (q + k * s * m));
 +                }
 +                Kernel::template butterfly<radix>(a, o);
 +                if constexpr (intoInterleaved) {
++#pragma GCC unroll 16
 +                    for (std::size_t k = 0UZ; k < radix; ++k) {
 +                        Kernel::storeInterleaved(o[k], yp + 2 * (q + k * s));
 +                    }
 +                } else {
 +                    if (p != 0UZ) {
++#pragma GCC unroll 16
 +                        for (std::size_t k = 1UZ; k < radix; ++k) {
 +                            o[k] = Kernel::multiply(o[k], TVector(t[2 * (k - 1)]), TVector(t[2 * (k - 1) + 1]));
 +                        }
 +                    }
++#pragma GCC unroll 16
 +                    for (std::size_t k = 0UZ; k < radix; ++k) {
 +                        Kernel::storeSplit(o[k], yp + 2 * (q + k * s));
 +                    }

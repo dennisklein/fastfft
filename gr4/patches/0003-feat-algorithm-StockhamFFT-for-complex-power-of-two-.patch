@@ -1,37 +1,50 @@
-From 2bf41934a0c1a5f2b986d7df8cb76d0a73cf4724 Mon Sep 17 00:00:00 2001
+From bb99ab71c96edd5b7c23687c1af612b3330c141d Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
-Date: Tue, 13 Oct 2026 15:03:34 +0000
-Subject: [PATCH 03/11] feat(algorithm): StockhamFFT for complex power-of-two
+Date: Tue, 13 Oct 2026 17:19:37 +0000
+Subject: [PATCH 3/7] feat(algorithm): StockhamFFT for complex power-of-two
  sizes at native simd width
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
-`gr::algorithm::FFT` routes complex power-of-two transforms of at least 64 points to `StockhamFFT` where the `std::simd` backend is native, through a `constexpr` route table per type and vector width; everything else stays on `SimdFFT`.
+`gr::algorithm::FFT` routes complex power-of-two transforms of at least 64 points to `StockhamFFT` where the `std::simd` backend is native, through measured `constexpr` route tables per type and vector width; everything else stays on `SimdFFT`.
 
 ```cpp
 gr::algorithm::StockhamFFT<float> fft;
-fft.resize(1024UZ);                  // default plan {8, 16, 8}
+fft.resize(1024UZ);                             // default plan {8, 16, 8}
 fft.resize(1024UZ, std::array{8UZ, 8UZ, 16UZ}); // explicit radix plan, checked by isValidPlan
-fft.forward(in, out);                // unnormalised, in == out allowed
+fft.forward(in, out);                           // unnormalised, in == out allowed
 ```
 
 Stockham autosort [Stockham 1966; Van Loan 1992], interleaved complex data, radix-8 first pass with an in-register transpose, radix 2/4/8/16 later passes vectorised over the stride.
 C++23: vir/libstdc++ `native_simd`, two-input shuffles via `__builtin_shufflevector` on the same-width vector type.
 C++26 preview (`__cpp_lib_simd`): `std::simd::vec`, `permute` and `cat`, no compiler extensions.
+gr4 builds Release at -O2, where GCC keeps fixed-count loops rolled and their vector arrays on the stack; `#pragma GCC unroll` makes -O2 code match -O3.
+On 2-lane targets (double on SSE2/NEON) re/im swaps work per native register, since the 4-scalar bridge vector is not trivially copyable and lowers to scalar stack moves.
+
+Stream-mode time of the routed plan relative to `SimdFFT`, range over N = 2^6 .. 2^20 (median of 40 interleaved rounds, Xeon @ 2.1 GHz VM, GCC 15):
+
+| target                  | float       | double      |
+| ----------------------- | ----------: | ----------: |
+| SSE2, -march=x86-64     | 0.31 – 0.81 | 0.57 – 0.91 |
+| AVX2, -march=x86-64-v3  | 0.44 – 0.77 | 0.62 – 1.00 |
+| AVX-512, -march=native  | 0.32 – 0.65 | 0.54 – 0.80 |
 
 ### Changes
 - `StockhamFFT.hpp`: kernel, plans (`defaultPlan`, `isValidPlan`), C++23 and C++26 backends
-- `fft.hpp`: `FFTRoute` tables and `fftRoute<T>(N)`; at 128-bit vectors N > 2^14 stays on `SimdFFT` (measured, HX 370)
-- `qa_StockhamFFT.cpp`: long-double DFT ground truth 2^6–2^16 (2^20 double), every valid plan, in-place, impulse and tone, routing
+- `FFTRoutes.hpp`: `FFTKernel`, `FFTRoute`, measured tables for 128/256/512-bit vectors (as printed by `bm_fft`), all-default fallback for other widths
+- `fft.hpp`: `fftRoute<T>(N)` and the dispatch in `FFT::compute`
+- `qa_StockhamFFT.cpp`: long-double DFT ground truth 2^6–2^16 (2^20 double), every valid plan, in-place, impulse and tone, routing and route-table consistency
 - `bm_FFT_backends.cpp`: CPU row labelled `FFT (CPU)`
 ---
  algorithm/benchmarks/bm_FFT_backends.cpp      |   6 +-
- .../algorithm/fourier/StockhamFFT.hpp         | 400 ++++++++++++++++++
- .../gnuradio-4.0/algorithm/fourier/fft.hpp    |  41 ++
+ .../algorithm/fourier/FFTRoutes.hpp           | 151 ++++++
+ .../algorithm/fourier/StockhamFFT.hpp         | 433 ++++++++++++++++++
+ .../gnuradio-4.0/algorithm/fourier/fft.hpp    |  26 ++
  algorithm/test/CMakeLists.txt                 |   2 +
- algorithm/test/qa_StockhamFFT.cpp             | 298 +++++++++++++
- 5 files changed, 744 insertions(+), 3 deletions(-)
+ algorithm/test/qa_StockhamFFT.cpp             | 303 ++++++++++++
+ 6 files changed, 918 insertions(+), 3 deletions(-)
+ create mode 100644 algorithm/include/gnuradio-4.0/algorithm/fourier/FFTRoutes.hpp
  create mode 100644 algorithm/include/gnuradio-4.0/algorithm/fourier/StockhamFFT.hpp
  create mode 100644 algorithm/test/qa_StockhamFFT.cpp
 
@@ -66,12 +79,169 @@ index 7494c03..755046d 100644
                  for (std::size_t b = 0; b < nBatches; ++b) {
                      cpuFft->compute(std::span<const C>(batchInput->data() + b * N, N), *output);
                  }
+diff --git a/algorithm/include/gnuradio-4.0/algorithm/fourier/FFTRoutes.hpp b/algorithm/include/gnuradio-4.0/algorithm/fourier/FFTRoutes.hpp
+new file mode 100644
+index 0000000..d7e57ef
+--- /dev/null
++++ b/algorithm/include/gnuradio-4.0/algorithm/fourier/FFTRoutes.hpp
+@@ -0,0 +1,151 @@
++#ifndef GNURADIO_ALGORITHM_FFT_ROUTES_HPP
++#define GNURADIO_ALGORITHM_FFT_ROUTES_HPP
++
++#include <algorithm>
++#include <array>
++#include <bit>
++#include <concepts>
++#include <cstddef>
++#include <limits>
++#include <span>
++
++namespace gr::algorithm {
++
++enum class FFTKernel { simdFft, stockham };
++
++struct FFTRoute {
++    std::size_t                  maxLog2N;
++    FFTKernel                    kernel;
++    std::span<const std::size_t> plan{}; // StockhamFFT pass radices; empty: its default plan
++};
++
++// which kernel and radix plan computes a complex power-of-two FFT, per type and vector width;
++// measured: bm_fft (stream mode, 40 rounds, 5 ms samples, a candidate replaces a route only when its paired 95 % interval excludes the current one),
++// Intel Xeon @ 2.1 GHz (AVX-512 VM), GCC 15.3, -march=x86-64 / x86-64-v3 / native for 128 / 256 / 512 bit, 2026-10-13; regenerate from bm_fft's output
++
++inline constexpr std::array kPlanFloat128Bit0{8UZ, 2UZ, 16UZ, 16UZ};
++inline constexpr std::array kPlanFloat128Bit1{8UZ, 16UZ, 16UZ, 2UZ, 8UZ};
++inline constexpr std::array kPlanFloat128Bit2{8UZ, 16UZ, 16UZ, 4UZ, 4UZ, 2UZ};
++inline constexpr std::array kPlanFloat128Bit3{8UZ, 16UZ, 16UZ, 4UZ, 4UZ, 4UZ};
++inline constexpr std::array kPlanFloat128Bit4{8UZ, 16UZ, 16UZ, 2UZ, 8UZ, 8UZ};
++inline constexpr std::array kPlanFloat128Bit5{8UZ, 16UZ, 16UZ, 2UZ, 8UZ, 16UZ};
++inline constexpr std::array kPlanFloat128Bit6{8UZ, 16UZ, 16UZ, 16UZ, 4UZ, 4UZ, 2UZ};
++inline constexpr std::array kFFTRoutesFloat128Bit{
++    FFTRoute{.maxLog2N = 11UZ, .kernel = FFTKernel::stockham},
++    FFTRoute{.maxLog2N = 12UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat128Bit0},
++    FFTRoute{.maxLog2N = 14UZ, .kernel = FFTKernel::stockham},
++    FFTRoute{.maxLog2N = 15UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat128Bit1},
++    FFTRoute{.maxLog2N = 16UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat128Bit2},
++    FFTRoute{.maxLog2N = 17UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat128Bit3},
++    FFTRoute{.maxLog2N = 18UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat128Bit4},
++    FFTRoute{.maxLog2N = 19UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat128Bit5},
++    FFTRoute{.maxLog2N = 20UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat128Bit6},
++    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockham},
++};
++
++inline constexpr std::array kPlanDouble128Bit0{8UZ, 4UZ, 4UZ};
++inline constexpr std::array kPlanDouble128Bit1{8UZ, 4UZ, 4UZ, 2UZ};
++inline constexpr std::array kPlanDouble128Bit2{8UZ, 4UZ, 4UZ, 8UZ};
++inline constexpr std::array kPlanDouble128Bit3{8UZ, 4UZ, 4UZ, 16UZ};
++inline constexpr std::array kPlanDouble128Bit4{8UZ, 16UZ, 4UZ, 4UZ, 2UZ};
++inline constexpr std::array kPlanDouble128Bit5{8UZ, 16UZ, 4UZ, 4UZ, 4UZ};
++inline constexpr std::array kPlanDouble128Bit6{8UZ, 16UZ, 4UZ, 4UZ, 8UZ};
++inline constexpr std::array kPlanDouble128Bit7{8UZ, 16UZ, 16UZ, 4UZ, 4UZ};
++inline constexpr std::array kPlanDouble128Bit8{8UZ, 16UZ, 16UZ, 4UZ, 4UZ, 2UZ};
++inline constexpr std::array kPlanDouble128Bit9{8UZ, 16UZ, 16UZ, 4UZ, 4UZ, 4UZ};
++inline constexpr std::array kPlanDouble128Bit10{8UZ, 16UZ, 16UZ, 2UZ, 8UZ, 8UZ};
++inline constexpr std::array kPlanDouble128Bit11{8UZ, 16UZ, 16UZ, 4UZ, 4UZ, 16UZ};
++inline constexpr std::array kPlanDouble128Bit12{8UZ, 16UZ, 16UZ, 16UZ, 4UZ, 4UZ, 2UZ};
++inline constexpr std::array kFFTRoutesDouble128Bit{
++    FFTRoute{.maxLog2N = 6UZ, .kernel = FFTKernel::stockham},
++    FFTRoute{.maxLog2N = 7UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit0},
++    FFTRoute{.maxLog2N = 8UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit1},
++    FFTRoute{.maxLog2N = 9UZ, .kernel = FFTKernel::stockham},
++    FFTRoute{.maxLog2N = 10UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit2},
++    FFTRoute{.maxLog2N = 11UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit3},
++    FFTRoute{.maxLog2N = 12UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit4},
++    FFTRoute{.maxLog2N = 13UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit5},
++    FFTRoute{.maxLog2N = 14UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit6},
++    FFTRoute{.maxLog2N = 15UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit7},
++    FFTRoute{.maxLog2N = 16UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit8},
++    FFTRoute{.maxLog2N = 17UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit9},
++    FFTRoute{.maxLog2N = 18UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit10},
++    FFTRoute{.maxLog2N = 19UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit11},
++    FFTRoute{.maxLog2N = 20UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit12},
++    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockham},
++};
++
++inline constexpr std::array kPlanFloat256Bit0{8UZ, 16UZ, 16UZ, 4UZ, 4UZ};
++inline constexpr std::array kPlanFloat256Bit1{8UZ, 16UZ, 16UZ, 4UZ, 4UZ, 2UZ};
++inline constexpr std::array kPlanFloat256Bit2{8UZ, 2UZ, 16UZ, 16UZ, 16UZ, 16UZ};
++inline constexpr std::array kFFTRoutesFloat256Bit{
++    FFTRoute{.maxLog2N = 14UZ, .kernel = FFTKernel::stockham},
++    FFTRoute{.maxLog2N = 15UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat256Bit0},
++    FFTRoute{.maxLog2N = 16UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat256Bit1},
++    FFTRoute{.maxLog2N = 19UZ, .kernel = FFTKernel::stockham},
++    FFTRoute{.maxLog2N = 20UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat256Bit2},
++    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockham},
++};
++
++inline constexpr std::array kPlanDouble256Bit0{8UZ, 2UZ, 16UZ};
++inline constexpr std::array kPlanDouble256Bit1{8UZ, 16UZ, 16UZ, 4UZ, 4UZ};
++inline constexpr std::array kPlanDouble256Bit2{8UZ, 16UZ, 16UZ, 2UZ, 8UZ, 2UZ};
++inline constexpr std::array kPlanDouble256Bit3{8UZ, 2UZ, 16UZ, 16UZ, 16UZ, 16UZ};
++inline constexpr std::array kFFTRoutesDouble256Bit{
++    FFTRoute{.maxLog2N = 7UZ, .kernel = FFTKernel::stockham},
++    FFTRoute{.maxLog2N = 8UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble256Bit0},
++    FFTRoute{.maxLog2N = 14UZ, .kernel = FFTKernel::stockham},
++    FFTRoute{.maxLog2N = 15UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble256Bit1},
++    FFTRoute{.maxLog2N = 16UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble256Bit2},
++    FFTRoute{.maxLog2N = 19UZ, .kernel = FFTKernel::stockham},
++    FFTRoute{.maxLog2N = 20UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble256Bit3},
++    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockham},
++};
++
++inline constexpr std::array kPlanFloat512Bit0{8UZ, 16UZ, 2UZ, 8UZ};
++inline constexpr std::array kPlanFloat512Bit1{8UZ, 2UZ, 16UZ, 16UZ, 16UZ, 16UZ};
++inline constexpr std::array kFFTRoutesFloat512Bit{
++    FFTRoute{.maxLog2N = 10UZ, .kernel = FFTKernel::stockham},
++    FFTRoute{.maxLog2N = 11UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit0},
++    FFTRoute{.maxLog2N = 19UZ, .kernel = FFTKernel::stockham},
++    FFTRoute{.maxLog2N = 20UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit1},
++    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockham},
++};
++
++inline constexpr std::array kPlanDouble512Bit0{8UZ, 2UZ, 16UZ};
++inline constexpr std::array kPlanDouble512Bit1{8UZ, 16UZ, 4UZ, 16UZ, 16UZ};
++inline constexpr std::array kPlanDouble512Bit2{8UZ, 16UZ, 8UZ, 16UZ, 16UZ};
++inline constexpr std::array kPlanDouble512Bit3{8UZ, 2UZ, 16UZ, 16UZ, 16UZ, 16UZ};
++inline constexpr std::array kFFTRoutesDouble512Bit{
++    FFTRoute{.maxLog2N = 7UZ, .kernel = FFTKernel::stockham},
++    FFTRoute{.maxLog2N = 8UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble512Bit0},
++    FFTRoute{.maxLog2N = 16UZ, .kernel = FFTKernel::stockham},
++    FFTRoute{.maxLog2N = 17UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble512Bit1},
++    FFTRoute{.maxLog2N = 18UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble512Bit2},
++    FFTRoute{.maxLog2N = 19UZ, .kernel = FFTKernel::stockham},
++    FFTRoute{.maxLog2N = 20UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble512Bit3},
++    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockham},
++};
++
++inline constexpr std::array kFFTRoutesStockham{FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockham}};
++
++template<std::floating_point T, std::size_t vectorBytes>
++consteval std::span<const FFTRoute> measuredRoutes() {
++    if constexpr (vectorBytes == 16UZ) {
++        return std::is_same_v<T, float> ? std::span<const FFTRoute>(kFFTRoutesFloat128Bit) : std::span<const FFTRoute>(kFFTRoutesDouble128Bit);
++    } else if constexpr (vectorBytes == 32UZ) {
++        return std::is_same_v<T, float> ? std::span<const FFTRoute>(kFFTRoutesFloat256Bit) : std::span<const FFTRoute>(kFFTRoutesDouble256Bit);
++    } else if constexpr (vectorBytes == 64UZ) {
++        return std::is_same_v<T, float> ? std::span<const FFTRoute>(kFFTRoutesFloat512Bit) : std::span<const FFTRoute>(kFFTRoutesDouble512Bit);
++    } else {
++        return kFFTRoutesStockham;
++    }
++}
++
++// complex power-of-two transforms with N >= StockhamFFT<T>::kMinSize, keyed by T and W = native_simd<T>::size()
++template<std::floating_point T, std::size_t W>
++inline constexpr std::span<const FFTRoute> kFFTRoutes = measuredRoutes<T, W * sizeof(T)>();
++
++} // namespace gr::algorithm
++
++#endif // GNURADIO_ALGORITHM_FFT_ROUTES_HPP
 diff --git a/algorithm/include/gnuradio-4.0/algorithm/fourier/StockhamFFT.hpp b/algorithm/include/gnuradio-4.0/algorithm/fourier/StockhamFFT.hpp
 new file mode 100644
-index 0000000..91791a2
+index 0000000..e2ce5a7
 --- /dev/null
 +++ b/algorithm/include/gnuradio-4.0/algorithm/fourier/StockhamFFT.hpp
-@@ -0,0 +1,400 @@
+@@ -0,0 +1,433 @@
 +#ifndef GNURADIO_ALGORITHM_STOCKHAMFFT_HPP
 +#define GNURADIO_ALGORITHM_STOCKHAMFFT_HPP
 +
@@ -116,6 +286,7 @@ index 0000000..91791a2
 +#pragma GCC diagnostic ignored "-Wpsabi" // the kernel is always inlined, so the vector-argument ABI note does not apply
 +#endif
 +
++// the fixed-count loops of the kernel and the passes carry an unroll pragma: at -O2, the Release level, GCC keeps them as loops over arrays of V on the stack, ~2x slower
 +template<std::floating_point T>
 +struct StockhamKernel {
 +#if defined(__cpp_lib_simd) || defined(__glibcxx_simd)
@@ -175,12 +346,29 @@ index 0000000..91791a2
 +    [[gnu::always_inline]] static V    load(const T* p) { return V(p, vir::stdx::element_aligned); }
 +    [[gnu::always_inline]] static void store(const V& v, T* p) { v.copy_to(p, vir::stdx::element_aligned); }
 +
++    // double on 16-byte targets: V is a pair of registers, and a shuffle of the wider generic vector is lowered to scalar moves through the stack
++    // (~5x the whole transform), so the shuffles act on the registers, each holding one complex value
++    static constexpr bool kTwoRegisterVector = kNativeLanes == 2UZ;
++    using RegisterSimd                       = vir::stdx::native_simd<T>;
++    typedef T RegisterVector __attribute__((vector_size(sizeof(T) * 2UZ)));
++
 +    template<std::size_t... J>
 +    [[gnu::always_inline]] static V swapRealImag(const V& v, std::index_sequence<J...>) {
 +        const GenericVector g = toGeneric(v);
 +        return fromGeneric(__builtin_shufflevector(g, g, int(J ^ 1UZ)...));
 +    }
-+    [[gnu::always_inline]] static V swapRealImag(const V& v) { return swapRealImag(v, std::make_index_sequence<W>{}); }
++    [[gnu::always_inline]] static V swapRealImag(const V& v) {
++        if constexpr (kTwoRegisterVector) {
++            auto registers = vir::stdx::split<RegisterSimd>(v);
++            for (auto& r : registers) {
++                const auto g = std::bit_cast<RegisterVector>(r);
++                r            = std::bit_cast<RegisterSimd>(__builtin_shufflevector(g, g, 1, 0));
++            }
++            return vir::stdx::concat(registers);
++        } else {
++            return swapRealImag(v, std::make_index_sequence<W>{});
++        }
++    }
 +
 +    template<bool high, std::size_t... J>
 +    [[gnu::always_inline]] static V interleaveComplex(const V& a, const V& b, std::index_sequence<J...>) {
@@ -192,7 +380,11 @@ index 0000000..91791a2
 +    }
 +    template<bool high>
 +    [[gnu::always_inline]] static V interleaveComplex(const V& a, const V& b) {
-+        return interleaveComplex<high>(a, b, std::make_index_sequence<W>{});
++        if constexpr (kTwoRegisterVector) {
++            return vir::stdx::concat(vir::stdx::split<RegisterSimd>(a)[high], vir::stdx::split<RegisterSimd>(b)[high]);
++        } else {
++            return interleaveComplex<high>(a, b, std::make_index_sequence<W>{});
++        }
 +    }
 +#endif
 +
@@ -251,6 +443,7 @@ index 0000000..91791a2
 +
 +    [[gnu::always_inline]] static void butterfly16(const V* a, V* y) {
 +        V b[4][4];
++#pragma GCC unroll 16
 +        for (std::size_t j = 0UZ; j < 4UZ; ++j) {
 +            butterfly4(a[j], a[j + 4], a[j + 8], a[j + 12], b[j][0], b[j][1], b[j][2], b[j][3]);
 +        }
@@ -263,6 +456,7 @@ index 0000000..91791a2
 +        b[3][1] = complexMultiply(b[3][1], V(kSinPi8), minusPlus() * -kCosPi8); // W16^3
 +        b[3][2] = multiplyW8Cubed(b[3][2]);
 +        b[3][3] = complexMultiply(b[3][3], V(-kCosPi8), minusPlus() * kSinPi8); // W16^9
++#pragma GCC unroll 16
 +        for (std::size_t k = 0UZ; k < 4UZ; ++k) {
 +            butterfly4(b[0][k], b[1][k], b[2][k], b[3][k], y[k], y[k + 4], y[k + 8], y[k + 12]);
 +        }
@@ -276,16 +470,20 @@ index 0000000..91791a2
 +        V                              round1[8];
 +        V                              round2[8];
 +        constexpr std::array<int, 4UZ> kPairs = {0, 2, 1, 3};
++#pragma GCC unroll 16
 +        for (std::size_t i = 0UZ; i < 4UZ; ++i) {
 +            round1[2 * i]     = interleaveLow(s[kPairs[i]], s[kPairs[i] + 4]);
 +            round1[2 * i + 1] = interleaveHigh(s[kPairs[i]], s[kPairs[i] + 4]);
 +        }
++#pragma GCC unroll 16
 +        for (std::size_t h = 0UZ; h < 2UZ; ++h) {
++#pragma GCC unroll 16
 +            for (std::size_t i = 0UZ; i < 2UZ; ++i) {
 +                round2[4 * h + 2 * i]     = interleaveLow(round1[4 * h + i], round1[4 * h + 2 + i]);
 +                round2[4 * h + 2 * i + 1] = interleaveHigh(round1[4 * h + i], round1[4 * h + 2 + i]);
 +            }
 +        }
++#pragma GCC unroll 16
 +        for (std::size_t i = 0UZ; i < 4UZ; ++i) {
 +            out[2 * i]     = interleaveLow(round2[i], round2[4 + i]);
 +            out[2 * i + 1] = interleaveHigh(round2[i], round2[4 + i]);
@@ -412,14 +610,17 @@ index 0000000..91791a2
 +            const T*              t                      = _twiddles.data() + pass.twiddleOffset;
 +            for (std::size_t p0 = 0UZ; p0 < m; p0 += C, t += kTwiddleValuesPerGroup) {
 +                V a[8], o[8], transposed[8];
++#pragma GCC unroll 16
 +                for (std::size_t k = 0UZ; k < 8UZ; ++k) {
 +                    a[k] = Kernel::load(x + 2 * (p0 + k * m));
 +                }
 +                Kernel::butterfly8(a, o);
++#pragma GCC unroll 16
 +                for (std::size_t k = 1UZ; k < 8UZ; ++k) {
 +                    o[k] = Kernel::complexMultiply(o[k], Kernel::load(t + 2 * W * (k - 1)), Kernel::load(t + 2 * W * (k - 1) + W));
 +                }
 +                Kernel::transpose8(o, transposed);
++#pragma GCC unroll 16
 +                for (std::size_t i = 0UZ; i < 8UZ; ++i) {
 +                    Kernel::store(transposed[i], y + 2 * 8 * p0 + W * i);
 +                }
@@ -447,6 +648,7 @@ index 0000000..91791a2
 +            T*       yp = y + 2 * s * radix * p;
 +            for (std::size_t q = 0UZ; q < s; q += C) {
 +                V a[radix], o[radix];
++#pragma GCC unroll 16
 +                for (std::size_t k = 0UZ; k < radix; ++k) {
 +                    a[k] = Kernel::load(xp + 2 * (q + k * s * m));
 +                }
@@ -461,6 +663,7 @@ index 0000000..91791a2
 +                    Kernel::butterfly16(a, o);
 +                }
 +                Kernel::store(o[0], yp + 2 * q);
++#pragma GCC unroll 16
 +                for (std::size_t k = 1UZ; k < radix; ++k) {
 +                    Kernel::store(p == 0UZ ? o[k] : Kernel::complexMultiply(o[k], Kernel::broadcastComplex(t + 4 * (k - 1)), Kernel::broadcastComplex(t + 4 * (k - 1) + 2)), yp + 2 * (q + k * s));
 +                }
@@ -473,10 +676,10 @@ index 0000000..91791a2
 +
 +#endif // GNURADIO_ALGORITHM_STOCKHAMFFT_HPP
 diff --git a/algorithm/include/gnuradio-4.0/algorithm/fourier/fft.hpp b/algorithm/include/gnuradio-4.0/algorithm/fourier/fft.hpp
-index b69b4d3..772a436 100644
+index b69b4d3..b8ce804 100644
 --- a/algorithm/include/gnuradio-4.0/algorithm/fourier/fft.hpp
 +++ b/algorithm/include/gnuradio-4.0/algorithm/fourier/fft.hpp
-@@ -4,12 +4,14 @@
+@@ -4,12 +4,15 @@
  #include <bit>
  #include <complex>
  #include <execution>
@@ -486,31 +689,16 @@ index b69b4d3..772a436 100644
  #include <stdexcept>
  #include <vector>
  
++#include <gnuradio-4.0/algorithm/fourier/FFTRoutes.hpp>
  #include <gnuradio-4.0/algorithm/fourier/SimdFFT.hpp>
 +#include <gnuradio-4.0/algorithm/fourier/StockhamFFT.hpp>
  #include <gnuradio-4.0/meta/utils.hpp>
  
  namespace gr::algorithm {
-@@ -86,6 +88,28 @@ constexpr void fft_stage_kernel(C* data, const C* twiddles, std::size_t halfsize
+@@ -86,6 +89,12 @@ constexpr void fft_stage_kernel(C* data, const C* twiddles, std::size_t halfsize
  
  } // namespace detail
  
-+enum class FFTKernel { simdFft, stockham };
-+
-+struct FFTRoute {
-+    std::size_t                  maxLog2N;
-+    FFTKernel                    kernel;
-+    std::span<const std::size_t> plan{}; // StockhamFFT pass radices; empty: its default plan
-+};
-+
-+inline constexpr std::array kFFTRoutesStockham{FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockham}};
-+// measured: AMD Ryzen AI 9 HX 370, 2026-10-11, fastfft results/zeta-20261011-0058 (Stockham 0.54-0.71x of SimdFFT above 2^14)
-+inline constexpr std::array kFFTRoutes128Bit{FFTRoute{.maxLog2N = 14UZ, .kernel = FFTKernel::stockham}, FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::simdFft}};
-+
-+// complex power-of-two transforms with N >= StockhamFFT<T>::kMinSize, keyed by T and W = native_simd<T>::size()
-+template<std::floating_point T, std::size_t W>
-+inline constexpr std::span<const FFTRoute> kFFTRoutes = W * sizeof(T) == 16UZ ? std::span<const FFTRoute>(kFFTRoutes128Bit) : std::span<const FFTRoute>(kFFTRoutesStockham);
-+
 +template<std::floating_point T>
 +[[nodiscard]] constexpr FFTRoute fftRoute(std::size_t N) noexcept {
 +    const auto log2N = static_cast<std::size_t>(std::countr_zero(N));
@@ -520,7 +708,7 @@ index b69b4d3..772a436 100644
  template<typename TInput, gr::meta::complex_like TOutput = std::conditional_t<gr::meta::complex_like<TInput>, TInput, std::complex<TInput>>>
  requires((gr::meta::complex_like<TInput> || std::floating_point<TInput>))
  struct FFT {
-@@ -104,6 +128,7 @@ struct FFT {
+@@ -104,6 +113,7 @@ struct FFT {
      mutable std::vector<ValueType, gr::allocator::Aligned<ValueType>> alignedInputBuffer{};
      mutable std::vector<ValueType, gr::allocator::Aligned<ValueType>> alignedOutputBuffer{};
      bool                                                              useSimdFFT{true};
@@ -528,7 +716,7 @@ index b69b4d3..772a436 100644
  
      void initAll() {
          precomputeTwiddleFactors();
-@@ -130,6 +155,22 @@ struct FFT {
+@@ -130,6 +140,22 @@ struct FFT {
              precomputeBluesteinTable(size); // added
          }
  
@@ -573,10 +761,10 @@ index 1ac4486..c4d5c43 100644
  target_link_libraries(qa_SampleRateEstimator PRIVATE gnuradio-algorithm)
 diff --git a/algorithm/test/qa_StockhamFFT.cpp b/algorithm/test/qa_StockhamFFT.cpp
 new file mode 100644
-index 0000000..bed63c7
+index 0000000..320a20c
 --- /dev/null
 +++ b/algorithm/test/qa_StockhamFFT.cpp
-@@ -0,0 +1,298 @@
+@@ -0,0 +1,303 @@
 +#include <boost/ut.hpp>
 +
 +#include <algorithm>
@@ -859,19 +1047,24 @@ index 0000000..bed63c7
 +        }
 +    } | std::tuple<float, double>{};
 +
-+    "the route table sends 128-bit vectors above 2^14 to SimdFFT and everything else to StockhamFFT"_test = [] {
-+        using gr::algorithm::FFTKernel;
-+        using gr::algorithm::kFFTRoutes;
-+        const auto kernelFor = [](std::span<const gr::algorithm::FFTRoute> routes, std::size_t log2N) { return std::ranges::find_if(routes, [log2N](const auto& route) { return log2N <= route.maxLog2N; })->kernel; };
-+        for (std::size_t log2N = 6UZ; log2N <= 20UZ; ++log2N) {
-+            const FFTKernel expected128Bit = log2N <= 14UZ ? FFTKernel::stockham : FFTKernel::simdFft;
-+            expect(kernelFor(kFFTRoutes<float, 4UZ>, log2N) == expected128Bit) << std::format("log2N={}", log2N);
-+            expect(kernelFor(kFFTRoutes<double, 2UZ>, log2N) == expected128Bit) << std::format("log2N={}", log2N);
-+            expect(kernelFor(kFFTRoutes<float, 8UZ>, log2N) == FFTKernel::stockham) << std::format("log2N={}", log2N);
-+            expect(kernelFor(kFFTRoutes<float, 16UZ>, log2N) == FFTKernel::stockham) << std::format("log2N={}", log2N);
-+            expect(kernelFor(kFFTRoutes<double, 8UZ>, log2N) == FFTKernel::stockham) << std::format("log2N={}", log2N);
-+        }
-+    };
++    "every route table is ordered, ends with the catch-all and holds only valid plans"_test = []<typename T> {
++        using gr::algorithm::FFTRoute;
++        const auto checkTable = [](std::span<const FFTRoute> routes, std::string_view name) {
++            expect(!routes.empty() && routes.back().maxLog2N == std::numeric_limits<std::size_t>::digits) << name;
++            expect(std::ranges::is_sorted(routes, std::less{}, &FFTRoute::maxLog2N)) << name;
++            for (std::size_t i = 0UZ; i < routes.size(); ++i) {
++                if (routes[i].plan.empty()) {
++                    continue;
++                }
++                const std::size_t log2N = routes[i].maxLog2N;
++                expect(i == 0UZ || routes[i - 1UZ].maxLog2N + 1UZ == log2N) << std::format("{}: a plan covers exactly one size, entry {}", name, i);
++                expect(StockhamFFT<T>::isValidPlan(1UZ << log2N, routes[i].plan)) << std::format("{}: plan of entry {}", name, i);
++            }
++        };
++        checkTable(gr::algorithm::kFFTRoutes<T, 16UZ / sizeof(T)>, "128 bit");
++        checkTable(gr::algorithm::kFFTRoutes<T, 32UZ / sizeof(T)>, "256 bit");
++        checkTable(gr::algorithm::kFFTRoutes<T, 64UZ / sizeof(T)>, "512 bit");
++    } | std::tuple<float, double>{};
 +};
 +
 +int main() { /* not needed for UT */ }
