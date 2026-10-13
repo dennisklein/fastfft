@@ -197,7 +197,7 @@ gr4's rule is *nomen est omen*: the name should carry the algorithm.
 
 | option | for | against |
 | --- | --- | --- |
-| `StockhamFFT` (recommended) | names the algorithm all our variants share (V2–V6 are layouts, plans and decompositions of Stockham passes); matches the "Van Loan Stockham" wording in gr4's `SyclFFT` | V5 four-step is a Stockham sub-FFT inside another scheme |
+| `StockhamFFT` (chosen 2026-10-13) | names the algorithm all our variants share (V2–V6 are layouts, plans and decompositions of Stockham passes); matches the "Van Loan Stockham" wording in gr4's `SyclFFT` | V5 four-step is a Stockham sub-FFT inside another scheme |
 | `NativeWidthFFT` | names the actual difference from `SimdFFT` | stops being true the day `SimdFFT` is widened |
 | `fft::Stockham`, `fft::Pffft` in a namespace | symmetric, and room for both kernels by lineage | renames shipped API (`SimdFFT`); a larger discussion with the maintainers |
 | keep `FastFFT` | continuity with the paper | names a property every FFT claims |
@@ -210,7 +210,7 @@ The `gr4/` directory mirrors gnuradio4's tree: every file there is a new or repl
 A pinned gnuradio4 revision and one script apply it, build, test and benchmark.
 The gr4-bound commits are prepared for Dennis to sign off (`git commit -s`), one per change scenario, with no assistant trailer.
 
-1. Agree on this design and the name.
+1. Agree on this design (name decided: `StockhamFFT`).
 2. `benchmark.hpp` opt-in statistics and comparison groups, with a `qa_` for the median interval.
 3. Port V1 under the agreed name, C++23 and C++26 paths, `qa_` against a long-double DFT; the new `bm_fft.cpp` with `--routes`.
 4. Measure V6 plans at W = 4, 8, 16 on both hosts; first switch tables.

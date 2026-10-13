@@ -1,6 +1,6 @@
-# Faster FFT kernels for GNU Radio 4
+# StockhamFFT for GNU Radio 4
 
-Work towards a gnuradio4 pull request: a measured, portable `std::simd` FFT kernel family next to `SimdFFT`, its switch table, and the benchmark that tunes it.
+Work towards a gnuradio4 pull request: a measured, portable `std::simd` FFT kernel family next to `SimdFFT` (`StockhamFFT`), its switch table, and the benchmark that tunes it.
 The background experiment and paper are on the `main` branch.
 
 - `doc/design.md`: design under discussion
