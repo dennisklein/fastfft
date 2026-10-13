@@ -1,0 +1,565 @@
+From 23bb3dbddd89a73c2b13991d239ae0e0de938157 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 13 Oct 2026 15:18:29 +0000
+Subject: [PATCH 05/11] perf(algorithm): bm_fft compares FFT kernels and plans
+ per size and prints this host's route table
+
+Every (type, N) is one interleaved comparison group: `SimdFFT` (reference), `StockhamFFT` with its default and alternative radix plans, the dispatcher `FFT`, each accuracy-checked against a long-double DFT before timing, in `hot` (one frame) and `stream` (frames cycling through 2^16 points) modes.
+The end of the run prints the `constexpr` route tables this host would choose: a candidate replaces the current route only when its paired ratio's 95 % interval lies entirely below.
+
+```bash
+taskset -c 2 env BM_FFT_ROUNDS=40 BM_FFT_MAX_LOG2=20 BM_FFT_MIN_SAMPLE_MS=5 ./bm_fft
+```
+
+### Changes
+- `bm_fft.cpp`: rewritten on `benchmark::compare`; `BM_FFT_ROUNDS`, `BM_FFT_MAX_LOG2`, `BM_FFT_MIN_SAMPLE_MS`; header line with compiler, simd backend, width and CPU
+---
+ algorithm/benchmarks/bm_fft.cpp | 505 ++++++++++++++++++++++++++++----
+ 1 file changed, 452 insertions(+), 53 deletions(-)
+
+diff --git a/algorithm/benchmarks/bm_fft.cpp b/algorithm/benchmarks/bm_fft.cpp
+index 093269c..e751211 100644
+--- a/algorithm/benchmarks/bm_fft.cpp
++++ b/algorithm/benchmarks/bm_fft.cpp
+@@ -1,86 +1,485 @@
++// Forward complex FFT: SimdFFT (the old route) against StockhamFFT plans, experimental variants and the FFT dispatcher; hot and stream cache modes; prints a route table for this host.
++// BM_FFT_ROUNDS (default 8; rounded up to 3, 8, 20, 40 or 100), BM_FFT_MAX_LOG2 (default 16), BM_FFT_MIN_SAMPLE_MS (default 1): timed rounds, largest N = 2^x, minimum duration of one sample.
++// Tuning: taskset -c 2 env BM_FFT_ROUNDS=40 BM_FFT_MAX_LOG2=20 BM_FFT_MIN_SAMPLE_MS=5 ./bm_fft
++#include <algorithm>
++#include <array>
++#include <bit>
++#include <charconv>
++#include <chrono>
++#include <cmath>
++#include <complex>
++#include <cstdlib>
+ #include <format>
++#include <fstream>
++#include <functional>
++#include <limits>
++#include <memory>
+ #include <numbers>
++#include <optional>
++#include <print>
++#include <random>
++#include <set>
++#include <span>
++#include <string>
++#include <utility>
++#include <vector>
+ 
+ #include <benchmark.hpp>
+ 
+ #include <gnuradio-4.0/algorithm/fourier/fft.hpp>
+-#include <gnuradio-4.0/meta/UnitTestHelper.hpp>
++
++#if __has_include("StockhamFFTSplit.hpp")
++#include "StockhamFFTSplit.hpp"
++#endif
++#if __has_include("StockhamFFTBatch.hpp")
++#include "StockhamFFTBatch.hpp"
++#endif
++#if __has_include("StockhamFFTFourStep.hpp")
++#include "StockhamFFTFourStep.hpp"
++#endif
++
++namespace {
++
++using namespace gr::algorithm;
++
++enum class Mode { hot, stream };
++
++constexpr std::string_view modeName(Mode mode) { return mode == Mode::hot ? "hot" : "stream"; }
++
++constexpr std::size_t kStreamPoints  = 1UZ << 16;
++constexpr std::size_t kMaxPlans      = 6UZ;
++constexpr std::size_t kMaxCases      = 12UZ; // reference, default plan, kMaxPlans, three variants, FFT
++constexpr std::size_t kDirectDFTMaxN = 1UZ << 12;
++
++constexpr std::array kRoundChoices{3UZ, 8UZ, 20UZ, 40UZ, 100UZ};
++
++struct Settings {
++    std::size_t rounds;
++    std::size_t maxLog2;
++    std::size_t minSampleMs;
++};
++
++std::size_t envOr(const char* name, std::size_t fallback) {
++    const char* text = std::getenv(name);
++    if (text == nullptr) {
++        return fallback;
++    }
++    std::size_t value{};
++    const auto  end = text + std::char_traits<char>::length(text);
++    if (const auto [ptr, ec] = std::from_chars(text, end, value); ec != std::errc{} || ptr != end || value == 0UZ) {
++        std::println("invalid value for {}: '{}', using {}", name, text, fallback);
++        return fallback;
++    }
++    return value;
++}
+ 
+ template<typename T>
+-std::vector<T, gr::allocator::Aligned<T>> generateSinSample(std::size_t N, double sampleRate, double frequency, double amplitude) {
+-    std::vector<T, gr::allocator::Aligned<T>> signal(N);
+-    for (std::size_t i = 0; i < N; i++) {
+-        if constexpr (gr::meta::complex_like<T>) {
+-            signal[i] = {static_cast<typename T::value_type>(amplitude * std::sin(2. * std::numbers::pi * frequency * static_cast<double>(i) / sampleRate)), 0.};
+-        } else {
+-            signal[i] = static_cast<T>(amplitude * std::sin(2. * std::numbers::pi * frequency * static_cast<double>(i) / sampleRate));
++using Buffer = std::vector<std::complex<T>, gr::allocator::Aligned<std::complex<T>>>;
++
++struct Candidate {
++    std::string                                                           name;
++    std::optional<FFTKernel>                                              kernel; // empty: not a choice of the route table
++    std::vector<std::size_t>                                              plan;   // StockhamFFT pass radices
++    bool                                                                  isDefaultPlan{false};
++    bool                                                                  batch{false}; // takes all frames of the buffer in one call
++    std::function<void(std::span<const std::byte>, std::span<std::byte>)> run;
++};
++
++template<typename T>
++void apply(const Candidate& candidate, std::span<const std::complex<T>> in, std::span<std::complex<T>> out, std::size_t N) {
++    const auto bytesIn  = std::as_bytes(in);
++    const auto bytesOut = std::as_writable_bytes(out);
++    if (candidate.batch) {
++        candidate.run(bytesIn, bytesOut);
++        return;
++    }
++    constexpr std::size_t kPointBytes = sizeof(std::complex<T>);
++    for (std::size_t offset = 0UZ; offset < in.size(); offset += N) {
++        candidate.run(bytesIn.subspan(offset * kPointBytes, N * kPointBytes), bytesOut.subspan(offset * kPointBytes, N * kPointBytes));
++    }
++}
++
++template<typename T, typename Kernel>
++auto forwardOf(std::shared_ptr<Kernel> kernel) {
++    return [kernel](std::span<const std::byte> in, std::span<std::byte> out) { kernel->forward({reinterpret_cast<const std::complex<T>*>(in.data()), in.size() / sizeof(std::complex<T>)}, {reinterpret_cast<std::complex<T>*>(out.data()), out.size() / sizeof(std::complex<T>)}); };
++}
++
++std::string planName(std::span<const std::size_t> plan) {
++    std::string name = "Stockham";
++    for (std::size_t i = 0UZ; i < plan.size(); ++i) {
++        name += i == 0UZ ? " " : "·";
++        name += std::to_string(plan[i]);
++    }
++    return name;
++}
++
++// reorderings and single splits of the default plan, taken alternately so that both kinds appear when the cap is small
++std::vector<std::vector<std::size_t>> alternativePlans(std::size_t N) {
++    using Plan                    = std::vector<std::size_t>;
++    const Plan        defaultPlan = StockhamFFT<double>::defaultPlan(N);
++    const auto        isValid     = [N](const Plan& plan) { return StockhamFFT<double>::isValidPlan(N, plan); };
++    Plan              tail        = Plan(defaultPlan.begin() + 1, defaultPlan.end());
++    std::set<Plan>    seen{defaultPlan};
++    std::vector<Plan> reorderings;
++    std::vector<Plan> splits;
++
++    std::ranges::sort(tail);
++    do {
++        Plan plan{defaultPlan.front()};
++        plan.insert(plan.end(), tail.begin(), tail.end());
++        if (seen.insert(plan).second) {
++            reorderings.push_back(plan);
++        }
++    } while (std::ranges::next_permutation(tail).found);
++
++    for (std::size_t i = defaultPlan.size(); i-- > 1UZ;) {
++        for (const std::size_t a : {2UZ, 4UZ, 8UZ}) {
++            if (defaultPlan[i] % a != 0UZ || defaultPlan[i] == a) {
++                continue;
++            }
++            Plan plan = defaultPlan;
++            plan[i]   = a;
++            plan.insert(plan.begin() + static_cast<std::ptrdiff_t>(i) + 1, defaultPlan[i] / a);
++            if (isValid(plan) && seen.insert(plan).second) {
++                splits.push_back(plan);
++            }
+         }
+     }
+-    return signal;
++
++    std::vector<Plan> chosen;
++    for (std::size_t i = 0UZ; chosen.size() < kMaxPlans && (i < reorderings.size() || i < splits.size()); ++i) {
++        for (const auto* source : {&reorderings, &splits}) {
++            if (i < source->size() && chosen.size() < kMaxPlans && isValid((*source)[i])) {
++                chosen.push_back((*source)[i]);
++            }
++        }
++    }
++    return chosen;
+ }
+ 
+ template<typename T>
+-struct FFTAlgoPrecision {
+-    using type = T;
++std::vector<Candidate> makeCandidates(std::size_t N) {
++    std::vector<Candidate> candidates;
++    if (std::has_single_bit(N)) {
++        auto simd = std::make_shared<SimdFFT<T, Transform::Complex>>();
++        simd->resize(N);
++        candidates.push_back({.name = "SimdFFT", .kernel = FFTKernel::simdFft, .run = [simd, N](std::span<const std::byte> in, std::span<std::byte> out) { simd->template transform<Direction::Forward, Order::Ordered>(std::span<const T>(reinterpret_cast<const T*>(in.data()), 2UZ * N), std::span<T>(reinterpret_cast<T*>(out.data()), 2UZ * N)); }});
++
++        const auto defaultPlan = StockhamFFT<T>::defaultPlan(N);
++        auto       stockham    = std::make_shared<StockhamFFT<T>>();
++        stockham->resize(N);
++        candidates.push_back({.name = planName(defaultPlan) + " default", .kernel = FFTKernel::stockham, .plan = defaultPlan, .isDefaultPlan = true, .run = forwardOf<T>(stockham)});
++
++        for (auto& plan : alternativePlans(N)) {
++            auto kernel = std::make_shared<StockhamFFT<T>>();
++            kernel->resize(N, plan);
++            candidates.push_back({.name = planName(plan), .kernel = FFTKernel::stockham, .plan = plan, .run = forwardOf<T>(kernel)});
++        }
++
++#if __has_include("StockhamFFTSplit.hpp")
++        {
++            auto kernel = std::make_shared<StockhamFFTSplit<T>>();
++            kernel->resize(N);
++            candidates.push_back({.name = "Split", .run = forwardOf<T>(kernel)});
++        }
++#endif
++#if __has_include("StockhamFFTBatch.hpp")
++        {
++            auto kernel = std::make_shared<StockhamFFTBatch<T>>();
++            kernel->resize(N);
++            candidates.push_back({.name = "Batch", .batch = true, .run = forwardOf<T>(kernel)});
++        }
++#endif
++#if __has_include("StockhamFFTFourStep.hpp")
++        if (N >= StockhamFFTFourStep<T>::kMinSize) {
++            auto kernel = std::make_shared<StockhamFFTFourStep<T>>();
++            kernel->resize(N);
++            candidates.push_back({.name = "FourStep", .run = forwardOf<T>(kernel)});
++        }
++#endif
++    }
++
++    auto dispatcher = std::make_shared<FFT<std::complex<T>>>();
++    candidates.push_back({.name = "FFT", .run = [dispatcher](std::span<const std::byte> in, std::span<std::byte> out) {
++                              auto input  = std::span<const std::complex<T>>(reinterpret_cast<const std::complex<T>*>(in.data()), in.size() / sizeof(std::complex<T>));
++                              auto output = std::span<std::complex<T>>(reinterpret_cast<std::complex<T>*>(out.data()), out.size() / sizeof(std::complex<T>));
++                              dispatcher->compute(input, output);
++                          }});
++    return candidates;
++}
++
++template<typename T>
++std::vector<std::complex<long double>> referenceSpectrum(std::span<const std::complex<T>> x) {
++    using LC            = std::complex<long double>;
++    const std::size_t N = x.size();
++    std::vector<LC>   twiddles(N);
++    for (std::size_t n = 0UZ; n < N; ++n) {
++        twiddles[n] = std::polar(1.0L, -2.0L * std::numbers::pi_v<long double> * static_cast<long double>(n) / static_cast<long double>(N));
++    }
++
++    std::vector<LC> spectrum(N);
++    if (N <= kDirectDFTMaxN) {
++        for (std::size_t k = 0UZ; k < N; ++k) {
++            for (std::size_t n = 0UZ; n < N; ++n) {
++                spectrum[k] += LC(x[n]) * twiddles[(n * k) % N];
++            }
++        }
++        return spectrum;
++    }
++
++    const unsigned log2N = static_cast<unsigned>(std::countr_zero(N));
++    for (std::size_t n = 0UZ; n < N; ++n) {
++        std::size_t reversed = 0UZ;
++        for (unsigned bit = 0U; bit < log2N; ++bit) {
++            reversed |= ((n >> bit) & 1UZ) << (log2N - 1U - bit);
++        }
++        spectrum[reversed] = LC(x[n]);
++    }
++    for (std::size_t length = 2UZ; length <= N; length *= 2UZ) {
++        const std::size_t half = length / 2UZ;
++        const std::size_t step = N / length;
++        for (std::size_t start = 0UZ; start < N; start += length) {
++            for (std::size_t j = 0UZ; j < half; ++j) {
++                const LC u                 = spectrum[start + j];
++                const LC v                 = spectrum[start + j + half] * twiddles[j * step];
++                spectrum[start + j]        = u + v;
++                spectrum[start + j + half] = u - v;
++            }
++        }
++    }
++    return spectrum;
++}
++
++template<typename T>
++long double relativeL2Error(std::span<const std::complex<T>> got, const std::vector<std::complex<long double>>& reference) {
++    long double errorSum = 0.0L;
++    long double normSum  = 0.0L;
++    for (std::size_t i = 0UZ; i < got.size(); ++i) {
++        errorSum += std::norm(std::complex<long double>(got[i]) - reference[i]);
++        normSum += std::norm(reference[i]);
++    }
++    return std::sqrt(errorSum / normSum);
++}
++
++using Cases      = std::vector<::benchmark::comparison_case>;
++using Statistics = std::vector<::benchmark::case_statistics>;
++
++template<std::size_t ROUNDS, std::size_t K>
++Statistics compareK(std::string_view name, const Cases& cases, std::size_t scale, std::chrono::nanoseconds minSample) {
++    if (cases.size() == K) {
++        return [&]<std::size_t... I>(std::index_sequence<I...>) { return ::benchmark::compare<ROUNDS>(name, {cases[I]...}, scale, minSample); }(std::make_index_sequence<K>{});
++    }
++    if constexpr (K > 1UZ) {
++        return compareK<ROUNDS, K - 1UZ>(name, cases, scale, minSample);
++    } else {
++        std::unreachable();
++    }
++}
++
++Statistics compareGroup(std::string_view name, const Cases& cases, std::size_t scale, const Settings& settings) {
++    const auto minSample = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(settings.minSampleMs));
++    const auto choice    = std::min(static_cast<std::size_t>(std::ranges::find_if(kRoundChoices, [&](std::size_t rounds) { return rounds >= settings.rounds; }) - kRoundChoices.begin()), kRoundChoices.size() - 1UZ);
++    Statistics result;
++    [&]<std::size_t... I>(std::index_sequence<I...>) { ((I == choice ? (result = compareK<kRoundChoices[I], kMaxCases>(name, cases, scale, minSample), 0) : 0), ...); }(std::make_index_sequence<kRoundChoices.size()>{});
++    return result;
++}
++
++struct Measured {
++    const Candidate*             candidate;
++    ::benchmark::case_statistics statistics;
+ };
+ 
+-template<gr::meta::complex_like T>
+-struct FFTAlgoPrecision<T> {
+-    using type = typename T::value_type;
++struct RouteChoice {
++    FFTKernel                kernel;
++    std::vector<std::size_t> plan; // empty: the default plan
++    bool                     operator==(const RouteChoice&) const = default;
+ };
+ 
+-template<typename T, template<typename...> typename Algorithm>
+-void testFFT() {
+-    using namespace benchmark;
+-    using namespace boost::ut;
+-    using namespace boost::ut::reflection;
+-    using namespace gr;
+-    using namespace gr::algorithm;
++// a candidate replaces the current route only if its 95 % interval of the ratio to SimdFFT lies entirely below the current route's
++template<typename T>
++RouteChoice chooseRoute(std::size_t N, const std::vector<Measured>& measured) {
++    const FFTRoute                 current     = fftRoute<T>(N);
++    const std::vector<std::size_t> currentPlan = current.plan.empty() ? StockhamFFT<T>::defaultPlan(N) : std::vector<std::size_t>(current.plan.begin(), current.plan.end());
++    const auto                     isCurrent   = [&](const Candidate& c) { return c.kernel == current.kernel && (current.kernel == FFTKernel::simdFft || c.plan == currentPlan); };
++
++    const Measured* best = nullptr;
++    for (const auto& entry : measured) {
++        if (isCurrent(*entry.candidate)) {
++            best = &entry;
++        }
++    }
++    if (best == nullptr) {
++        return RouteChoice{current.kernel, {}};
++    }
++    const double currentLow    = best->statistics.ratio_to_reference.ci_low;
++    const double currentMedian = best->statistics.ratio_to_reference.median;
++    const auto*  winner        = best;
++    for (const auto& entry : measured) {
++        const auto& ratio = entry.statistics.ratio_to_reference;
++        if (entry.candidate->kernel && ratio.ci_high < currentLow && ratio.median < std::min(currentMedian, winner->statistics.ratio_to_reference.median)) {
++            winner = &entry;
++        }
++    }
++    return RouteChoice{*winner->candidate->kernel, winner->candidate->isDefaultPlan ? std::vector<std::size_t>{} : winner->candidate->plan};
++}
++
++template<typename T>
++constexpr std::string_view typeLabel() {
++    return std::is_same_v<T, float> ? "Float" : "Double";
++}
++
++template<typename T>
++void printRoutes(const std::vector<std::pair<std::size_t, RouteChoice>>& choices) {
++    if (choices.empty()) {
++        return;
++    }
++    constexpr std::size_t W = detail::StockhamKernel<T>::kNativeLanes;
++    std::println("\n// {}, W = {}, measured for N = 2^{} .. 2^{} in stream mode", typeLabel<T>(), W, choices.front().first, choices.back().first);
+ 
+-    using PrecisionType = std::remove_cv_t<typename FFTAlgoPrecision<T>::type>;
+-    using OutputType    = std::complex<PrecisionType>;
+-    using FFTAlgo       = Algorithm<T, OutputType>;
++    struct Entry {
++        std::size_t maxLog2N;
++        RouteChoice choice;
++    };
++    std::vector<Entry> entries;
++    for (const auto& [log2N, choice] : choices) {
++        if (!entries.empty() && entries.back().choice == choice) {
++            entries.back().maxLog2N = log2N;
++        } else {
++            entries.push_back({log2N, choice});
++        }
++    }
++    entries.back().maxLog2N = std::numeric_limits<std::size_t>::digits;
+ 
+-    for (std::size_t N : {512UZ, 1024UZ, 8192UZ, 65536UZ, 1009UZ /* prime */}) {
+-        constexpr int         nRepetitions{1000};
+-        constexpr std::size_t binnedFrequency{5UZ};
++    std::string table;
++    std::size_t planIndex = 0UZ;
++    for (const auto& entry : entries) {
++        const std::string maxLog2N = entry.maxLog2N == std::numeric_limits<std::size_t>::digits ? "std::numeric_limits<std::size_t>::digits" : std::format("{}UZ", entry.maxLog2N);
++        if (entry.choice.kernel == FFTKernel::simdFft) {
++            table += std::format("    FFTRoute{{.maxLog2N = {}, .kernel = FFTKernel::simdFft}},\n", maxLog2N);
++        } else if (entry.choice.plan.empty()) {
++            table += std::format("    FFTRoute{{.maxLog2N = {}, .kernel = FFTKernel::stockham}},\n", maxLog2N);
++        } else {
++            std::string radices;
++            for (const std::size_t radix : entry.choice.plan) {
++                radices += std::format("{}{}UZ", radices.empty() ? "" : ", ", radix);
++            }
++            const std::string name = std::format("kPlan{}{}", typeLabel<T>(), planIndex++);
++            std::println("inline constexpr std::array {}{{{}}};", name, radices);
++            table += std::format("    FFTRoute{{.maxLog2N = {}, .kernel = FFTKernel::stockham, .plan = {}}},\n", maxLog2N, name);
++        }
++    }
++    std::println("inline constexpr std::array kFFTRoutes{}{}Bit{{\n{}}};", typeLabel<T>(), W * sizeof(T) * 8UZ, table);
++}
+ 
+-        auto              templateName = [](std::string_view typeName) { return std::string(typeName.substr(0, typeName.find('<'))); };
+-        const std::string algoName     = templateName(gr::meta::type_name<FFTAlgo>());
+-        const std::string bmName       = std::format("{:21} - {:22} N = {:5}", algoName, type_name<T>(), N);
+-        const std::size_t scaling      = static_cast<std::size_t>(static_cast<double>(N) * std::log(static_cast<double>(N)));
++std::string cpuModel() {
++    std::ifstream cpuinfo("/proc/cpuinfo");
++    for (std::string line; std::getline(cpuinfo, line);) {
++        if (line.starts_with("model name")) {
++            const auto colon = line.find(':');
++            return colon == std::string::npos ? line : line.substr(std::min(colon + 2UZ, line.size()));
++        }
++    }
++    return "unknown";
++}
+ 
+-        try {
+-            std::vector<T, gr::allocator::Aligned<T>> signal = generateSinSample<T>(N, 1., static_cast<double>(binnedFrequency) / static_cast<double>(N), 1.);
+-            FFTAlgo                                   fft;
+-            auto                                      output = fft.compute(signal); // warm up cache/twiddlefactors
++void printHeader() {
++#if defined(__clang__)
++    constexpr std::string_view compiler = "clang";
++#elif defined(__GNUC__)
++    constexpr std::string_view compiler = "gcc";
++#else
++    constexpr std::string_view compiler = "unknown compiler";
++#endif
++#if defined(__cpp_lib_simd) || defined(__glibcxx_simd)
++    constexpr std::string_view simdLibrary = "C++26 <simd>";
++#else
++    constexpr std::string_view simdLibrary = "vir::stdx";
++#endif
++    std::println("compiler: {} {}", compiler, __VERSION__);
++    std::println("simd: {}, {}; W: float {}, double {}", kStockhamFFTHasNativeSimd ? "native" : "emulated", simdLibrary, detail::StockhamKernel<float>::kNativeLanes, detail::StockhamKernel<double>::kNativeLanes);
++    std::println("cpu: {}", cpuModel());
++    std::println("ops/s are scaled with 5 N log2(N); stream cases process {} points per call, hot cases one frame", kStreamPoints);
++}
+ 
+-            ::benchmark::benchmark<nRepetitions>(std::string_view(bmName), scaling) = [&fft, &signal, &output] { output = fft.compute(signal); };
++template<typename T>
++void sweepSize(std::size_t N, const Settings& settings, std::vector<std::pair<std::size_t, RouteChoice>>& routeChoices) {
++    using namespace boost::ut;
++    const std::size_t                 frames = std::max(N, kStreamPoints) / N;
++    Buffer<T>                         input(frames * N);
++    Buffer<T>                         output(frames * N);
++    std::mt19937_64                   generator{0x6772'3472};
++    std::uniform_real_distribution<T> distribution(T(-1), T(1));
++    for (auto& value : input) {
++        value = {distribution(generator), distribution(generator)};
++    }
++
++    // frame 0 and the last frame: a batch kernel must handle every frame, not only the first
++    const auto        frameOf    = [&](const Buffer<T>& buffer, std::size_t frame) { return std::span<const std::complex<T>>(buffer).subspan(frame * N, N); };
++    const auto        reference0 = referenceSpectrum<T>(frameOf(input, 0UZ));
++    const auto        referenceN = referenceSpectrum<T>(frameOf(input, frames - 1UZ));
++    const long double tolerance  = 4.0L * std::numeric_limits<T>::epsilon() * std::log2(static_cast<long double>(N));
++    const std::string sizeLabel  = std::format("{} N={}", std::is_same_v<T, float> ? "float" : "double", N);
+ 
+-            using namespace boost::ut;
+-            PrecisionType expectedMag = -static_cast<PrecisionType>(N) / static_cast<PrecisionType>(2); // N.B. un-normalised FFT
+-            expect(approx(output[binnedFrequency].imag(), expectedMag, static_cast<PrecisionType>(.1f))) << bmName << fatal;
+-        } catch (const std::exception& e) {
+-            std::println(stderr, "{} : {}", bmName, e.what());
+-        } catch (...) {
+-            std::println(stderr, "{} : unknown exception", bmName);
++    const auto                    candidates = makeCandidates<T>(N);
++    std::vector<const Candidate*> accurate;
++    for (const auto& candidate : candidates) {
++        std::ranges::fill(output, std::complex<T>(std::numeric_limits<T>::quiet_NaN()));
++        apply<T>(candidate, input, output, N);
++        const long double error = std::max(relativeL2Error<T>(frameOf(output, 0UZ), reference0), relativeL2Error<T>(frameOf(output, frames - 1UZ), referenceN));
++        const bool        ok    = error < tolerance;
++        expect(ok) << std::format("{}: {} relative L2 error {:.3Lg} exceeds {:.3Lg}", sizeLabel, candidate.name, error, tolerance);
++        if (ok) {
++            accurate.push_back(&candidate);
+         }
+     }
+ 
++    for (const Mode mode : {Mode::hot, Mode::stream}) {
++        const std::size_t             points = mode == Mode::hot ? N : frames * N;
++        Cases                         cases;
++        std::vector<const Candidate*> timed;
++        for (const Candidate* candidate : accurate) {
++            if (mode == Mode::hot && candidate->batch) {
++                continue;
++            }
++            timed.push_back(candidate);
++            cases.emplace_back(candidate->name, [candidate, N, points, &input, &output] { apply<T>(*candidate, std::span<const std::complex<T>>(input).first(points), std::span<std::complex<T>>(output).first(points), N); });
++        }
++        if (cases.empty()) {
++            continue;
++        }
++        const auto scale      = static_cast<std::size_t>(std::llround(5.0 * static_cast<double>(points) * std::log2(static_cast<double>(N))));
++        const auto statistics = compareGroup(std::format("{} {}", sizeLabel, modeName(mode)), cases, scale, settings);
++
++        if (mode == Mode::stream && std::has_single_bit(N)) {
++            std::vector<Measured> measured;
++            for (std::size_t i = 0UZ; i < timed.size(); ++i) {
++                measured.push_back({timed[i], statistics[i]});
++            }
++            routeChoices.emplace_back(static_cast<std::size_t>(std::countr_zero(N)), chooseRoute<T>(N, measured));
++        }
++    }
+     ::benchmark::results::add_separator();
+ }
+ 
+-inline const boost::ut::suite<"FFT forward tests"> _fft_bm_tests = [] {
+-    using namespace gr::algorithm;
++template<typename T>
++void sweep(const Settings& settings) {
++    std::vector<std::pair<std::size_t, RouteChoice>> routeChoices;
++    for (std::size_t log2N = 6UZ; log2N <= settings.maxLog2; ++log2N) {
++        sweepSize<T>(1UZ << log2N, settings, routeChoices);
++    }
++    for (const std::size_t N : {1000UZ, 1009UZ}) {
++        sweepSize<T>(N, settings, routeChoices);
++    }
++    printRoutes<T>(routeChoices);
++}
+ 
+-    auto testAll = [&]<typename... Ts>(auto /*types*/) { //
+-        auto testForType = []<typename T>() {
+-            ([]<template<typename, typename> typename Algo>() { testFFT<T, Algo>(); }.template operator()<FFT>()); //
+-        };
+-        (testForType.template operator()<Ts>(), ...);
+-    };
+-    testAll.operator()<std::complex<float>, std::complex<double>, float, double>(0);
+-    std::println("N.B. ops/s values are scaled with N*log(N).");
++} // namespace
++
++inline const boost::ut::suite<"FFT forward"> _fft_bm_tests = [] {
++    const Settings settings{envOr("BM_FFT_ROUNDS", 8UZ), envOr("BM_FFT_MAX_LOG2", 16UZ), envOr("BM_FFT_MIN_SAMPLE_MS", 1UZ)};
++    printHeader();
++    sweep<float>(settings);
++    sweep<double>(settings);
+ };
+ 
+ int main() { /* not needed by the UT framework */ }
+-- 
+2.43.0
+

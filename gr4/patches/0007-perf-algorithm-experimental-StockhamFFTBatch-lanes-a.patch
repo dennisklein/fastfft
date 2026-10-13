@@ -1,0 +1,380 @@
+From 87e29e50c450bc755a4a997b947f30a62eb16a63 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 13 Oct 2026 15:18:48 +0000
+Subject: [PATCH 07/11] perf(algorithm): experimental StockhamFFTBatch (lanes
+ across frames) for bm_fft
+
+---
+ algorithm/benchmarks/StockhamFFTBatch.hpp | 360 ++++++++++++++++++++++
+ 1 file changed, 360 insertions(+)
+ create mode 100644 algorithm/benchmarks/StockhamFFTBatch.hpp
+
+diff --git a/algorithm/benchmarks/StockhamFFTBatch.hpp b/algorithm/benchmarks/StockhamFFTBatch.hpp
+new file mode 100644
+index 0000000..b8313b1
+--- /dev/null
++++ b/algorithm/benchmarks/StockhamFFTBatch.hpp
+@@ -0,0 +1,360 @@
++#ifndef GNURADIO_ALGORITHM_STOCKHAMFFTBATCH_HPP
++#define GNURADIO_ALGORITHM_STOCKHAMFFTBATCH_HPP
++
++#include <gnuradio-4.0/algorithm/fourier/StockhamFFT.hpp>
++
++namespace gr::algorithm {
++
++#if defined(__GNUC__) && !defined(__clang__)
++#pragma GCC diagnostic push
++#pragma GCC diagnostic ignored "-Wpsabi" // everything is inlined, so the vector-argument ABI note does not apply
++#endif
++
++/**
++ * Forward complex FFT of many consecutive frames of N points (power of two, N >= 8), unnormalised, out of place or in place.
++ * Groups of kLanes frames run together in split layout, lane j holding frame j, so the Stockham passes [1] need no shuffles at all;
++ * frames are transposed into lanes in the first pass and back in the last (an L1 staging pass instead for tiny N), leftover frames go through StockhamFFT.
++ * Usage: `StockhamFFTBatch<float> fft; fft.resize(256); fft.forward(in, out); // in.size() == out.size() == 256 * nFrames`
++ * [1] T. G. Stockham, "High-speed convolution and correlation," in Proc. AFIPS Spring Joint Comput. Conf., 1966, pp. 229-233.
++ */
++template<std::floating_point T>
++struct StockhamFFTBatch {
++#if defined(__cpp_lib_simd) || defined(__glibcxx_simd)
++    using V = std::simd::vec<T>;
++#else
++    using V = vir::stdx::native_simd<T>; // native even for double on 16-byte targets: split layout has no C >= 2 constraint, unlike StockhamKernel::V
++#endif
++    static constexpr std::size_t kLanes    = V::size();    // frames per group
++    static constexpr std::size_t C         = kLanes / 2UZ; // complex values of one frame per vector: the transpose chunk
++    static constexpr std::size_t kMinSize  = 8UZ;          // one transpose chunk on every target (C <= 8)
++    static constexpr T           kInvSqrt2 = T(1) / std::numbers::sqrt2_v<T>;
++    static_assert(kLanes >= 2UZ && std::has_single_bit(kLanes) && C <= kMinSize);
++
++    struct Pass {
++        std::size_t n;
++        std::size_t s;
++        std::size_t radix;
++        std::size_t twiddleOffset;
++    };
++
++    struct SplitComplex {
++        V re;
++        V im;
++
++        friend SplitComplex operator+(const SplitComplex& a, const SplitComplex& b) { return {a.re + b.re, a.im + b.im}; }
++        friend SplitComplex operator-(const SplitComplex& a, const SplitComplex& b) { return {a.re - b.re, a.im - b.im}; }
++        friend SplitComplex operator*(const SplitComplex& z, const SplitComplex& w) { return {z.re * w.re - z.im * w.im, z.re * w.im + z.im * w.re}; }
++    };
++
++    using Rows = std::array<V, kLanes>;
++
++    std::size_t                               _size{0UZ};
++    bool                                      _transposeInFirstAndLastPass{false};
++    std::vector<Pass>                         _passes;
++    std::vector<T>                            _twiddles; // per pass with m > 1, per butterfly p, for k = 1..radix-1: (re, im) of W_n^(kp)
++    std::vector<T, gr::allocator::Aligned<T>> _laneA;    // point i of a group: re of all lanes at 2iW, im at (2i+1)W
++    std::vector<T, gr::allocator::Aligned<T>> _laneB;
++    std::vector<std::complex<T>>              _paddedGroup; // leftover frames when N is below StockhamFFT's minimum
++    StockhamFFT<T>                            _singleFrame;
++
++    [[nodiscard]] std::size_t size() const noexcept { return _size; }
++
++    [[nodiscard]] static constexpr bool isValidPlan(std::size_t N, std::span<const std::size_t> radices) noexcept {
++        const auto isSupportedRadix = [](std::size_t radix) { return radix == 2UZ || radix == 4UZ || radix == 8UZ; };
++        return N >= kMinSize && std::has_single_bit(N) && !radices.empty() && std::ranges::all_of(radices, isSupportedRadix) && std::ranges::fold_left(radices, 1UZ, std::multiplies{}) == N;
++    }
++
++    [[nodiscard]] static std::vector<std::size_t> defaultPlan(std::size_t N) {
++        assert(N >= kMinSize && std::has_single_bit(N));
++        std::vector<std::size_t> radices;
++        for (std::size_t n = N; n > 1UZ; n /= radices.back()) {
++            radices.push_back(std::min(n, 8UZ));
++        }
++        return radices;
++    }
++
++    void resize(std::size_t N) { resize(N, defaultPlan(N)); }
++
++    void resize(std::size_t N, std::span<const std::size_t> radices) {
++        assert(isValidPlan(N, radices));
++        const auto twiddle = [](std::size_t k, std::size_t n) { return std::polar(1.0, -2.0 * std::numbers::pi * static_cast<double>(k) / static_cast<double>(n)); };
++
++        _size = N;
++        _passes.clear();
++        _twiddles.clear();
++        std::size_t n = N;
++        std::size_t s = 1UZ;
++        for (const std::size_t radix : radices) {
++            const std::size_t m = n / radix;
++            _passes.push_back({n, s, radix, _twiddles.size()});
++            for (std::size_t p = 0UZ; m > 1UZ && p < m; ++p) {
++                for (std::size_t k = 1UZ; k < radix; ++k) {
++                    const auto w = twiddle(k * p, n);
++                    _twiddles.insert(_twiddles.end(), {static_cast<T>(w.real()), static_cast<T>(w.imag())});
++                }
++            }
++            n = m;
++            s *= radix;
++        }
++        // the first pass transposes C consecutive butterflies per vector and the last C consecutive stride positions
++        _transposeInFirstAndLastPass = _passes.size() >= 2UZ && N / radices.front() >= C && N / radices.back() >= C;
++        _laneA.resize(2UZ * N * kLanes);
++        _laneB.resize(2UZ * N * kLanes);
++        if (N >= StockhamFFT<T>::kMinSize) {
++            _singleFrame.resize(N);
++            _paddedGroup.clear();
++        } else {
++            _paddedGroup.assign(N * kLanes, std::complex<T>{});
++        }
++    }
++
++    void forward(std::span<const std::complex<T>> in, std::span<std::complex<T>> out) {
++        assert(_size > 0UZ && in.size() == out.size() && in.size() % _size == 0UZ);
++        const std::size_t N          = _size;
++        const std::size_t nFrames    = in.size() / N;
++        const std::size_t nGroups    = nFrames / kLanes;
++        const std::size_t groupSize  = kLanes * N;
++        const std::size_t nLeftover  = nFrames - nGroups * kLanes;
++        const std::size_t leftoverAt = nGroups * groupSize;
++        for (std::size_t g = 0UZ; g < nGroups; ++g) {
++            transformGroup(reinterpret_cast<const T*>(in.data() + g * groupSize), reinterpret_cast<T*>(out.data() + g * groupSize));
++        }
++        if (nLeftover == 0UZ) {
++            return;
++        }
++        if (_paddedGroup.empty()) {
++            for (std::size_t f = 0UZ; f < nLeftover; ++f) {
++                _singleFrame.forward(in.subspan(leftoverAt + f * N, N), out.subspan(leftoverAt + f * N, N));
++            }
++            return;
++        }
++        const std::size_t nLeftoverPoints = nLeftover * N;
++        std::ranges::copy(in.subspan(leftoverAt, nLeftoverPoints), _paddedGroup.begin());
++        T* padded = reinterpret_cast<T*>(_paddedGroup.data());
++        transformGroup(padded, padded);
++        std::ranges::copy(std::span(_paddedGroup).first(nLeftoverPoints), out.begin() + static_cast<std::ptrdiff_t>(leftoverAt));
++    }
++
++    // in place is safe: the group's frames are all read before the first write to y
++    void transformGroup(const T* x, T* y) {
++        T* lane  = _laneA.data();
++        T* other = _laneB.data();
++        if (_transposeInFirstAndLastPass) {
++            withRadix(_passes.front().radix, [&]<std::size_t radix>() { runFirstPass<radix>(_passes.front(), x, lane); });
++            for (std::size_t i = 1UZ; i + 1UZ < _passes.size(); ++i) {
++                withRadix(_passes[i].radix, [&]<std::size_t radix>() { runLanePass<radix>(_passes[i], lane, other); });
++                std::swap(lane, other);
++            }
++            withRadix(_passes.back().radix, [&]<std::size_t radix>() { runLastPass<radix>(_passes.back(), lane, y); });
++            return;
++        }
++        for (std::size_t point = 0UZ; point < _size; point += C) {
++            const Rows rows = loadFramesTransposed(x, point);
++            for (std::size_t c = 0UZ; c < C; ++c) {
++                storeLane(lane, point + c, {rows[2UZ * c], rows[2UZ * c + 1UZ]});
++            }
++        }
++        for (const Pass& pass : _passes) {
++            withRadix(pass.radix, [&]<std::size_t radix>() { runLanePass<radix>(pass, lane, other); });
++            std::swap(lane, other);
++        }
++        for (std::size_t point = 0UZ; point < _size; point += C) {
++            Rows rows;
++            for (std::size_t c = 0UZ; c < C; ++c) {
++                const SplitComplex z = loadLane(lane, point + c);
++                rows[2UZ * c]        = z.re;
++                rows[2UZ * c + 1UZ]  = z.im;
++            }
++            storeFramesTransposed(rows, y, point);
++        }
++    }
++
++    template<std::size_t radix>
++    void runFirstPass(const Pass& pass, const T* x, T* y) const {
++        const std::size_t m = pass.n / radix;
++        for (std::size_t p0 = 0UZ; p0 < m; p0 += C) {
++            std::array<Rows, radix> stage;
++            for (std::size_t k = 0UZ; k < radix; ++k) {
++                stage[k] = loadFramesTransposed(x, p0 + k * m);
++            }
++            for (std::size_t c = 0UZ; c < C; ++c) {
++                const std::size_t p = p0 + c;
++                SplitComplex      a[radix];
++                for (std::size_t k = 0UZ; k < radix; ++k) {
++                    a[k] = {stage[k][2UZ * c], stage[k][2UZ * c + 1UZ]};
++                }
++                butterfly<radix>(a);
++                const T* t = _twiddles.data() + pass.twiddleOffset + 2UZ * (radix - 1UZ) * p;
++                storeLane(y, radix * p, a[0]);
++                for (std::size_t k = 1UZ; k < radix; ++k) {
++                    storeLane(y, radix * p + k, a[k] * broadcastTwiddle(t + 2UZ * (k - 1UZ)));
++                }
++            }
++        }
++    }
++
++    template<std::size_t radix>
++    void runLanePass(const Pass& pass, const T* x, T* y) const {
++        const std::size_t s = pass.s;
++        const std::size_t m = pass.n / radix;
++        for (std::size_t p = 0UZ; p < m; ++p) {
++            SplitComplex w[radix];
++            for (std::size_t k = 1UZ; m > 1UZ && k < radix; ++k) {
++                w[k] = broadcastTwiddle(_twiddles.data() + pass.twiddleOffset + 2UZ * ((radix - 1UZ) * p + k - 1UZ));
++            }
++            for (std::size_t q = 0UZ; q < s; ++q) {
++                SplitComplex a[radix];
++                for (std::size_t k = 0UZ; k < radix; ++k) {
++                    a[k] = loadLane(x, q + s * (p + k * m));
++                }
++                butterfly<radix>(a);
++                storeLane(y, q + s * radix * p, a[0]);
++                for (std::size_t k = 1UZ; k < radix; ++k) {
++                    storeLane(y, q + s * (radix * p + k), m > 1UZ ? a[k] * w[k] : a[k]);
++                }
++            }
++        }
++    }
++
++    // the last pass has m = 1 and so no twiddles
++    template<std::size_t radix>
++    void runLastPass(const Pass& pass, const T* x, T* y) const {
++        const std::size_t s = pass.s;
++        for (std::size_t q0 = 0UZ; q0 < s; q0 += C) {
++            std::array<Rows, radix> stage;
++            for (std::size_t c = 0UZ; c < C; ++c) {
++                SplitComplex a[radix];
++                for (std::size_t k = 0UZ; k < radix; ++k) {
++                    a[k] = loadLane(x, q0 + c + s * k);
++                }
++                butterfly<radix>(a);
++                for (std::size_t k = 0UZ; k < radix; ++k) {
++                    stage[k][2UZ * c]       = a[k].re;
++                    stage[k][2UZ * c + 1UZ] = a[k].im;
++                }
++            }
++            for (std::size_t k = 0UZ; k < radix; ++k) {
++                storeFramesTransposed(stage[k], y, q0 + s * k);
++            }
++        }
++    }
++
++    template<typename F>
++    [[gnu::always_inline]] static void withRadix(std::size_t radix, F&& run) {
++        switch (radix) {
++        case 2UZ: run.template operator()<2UZ>(); return;
++        case 4UZ: run.template operator()<4UZ>(); return;
++        case 8UZ: run.template operator()<8UZ>(); return;
++        default: std::unreachable();
++        }
++    }
++
++    [[gnu::always_inline]] static SplitComplex loadLane(const T* lane, std::size_t point) { return {load(lane + 2UZ * kLanes * point), load(lane + 2UZ * kLanes * point + kLanes)}; }
++
++    [[gnu::always_inline]] static void storeLane(T* lane, std::size_t point, const SplitComplex& z) {
++        store(z.re, lane + 2UZ * kLanes * point);
++        store(z.im, lane + 2UZ * kLanes * point + kLanes);
++    }
++
++    [[gnu::always_inline]] static SplitComplex broadcastTwiddle(const T* t) { return {V(t[0]), V(t[1])}; }
++
++    // returns re of points point..point+C-1 at rows 2c and im at rows 2c+1, lane j from frame j
++    [[gnu::always_inline]] Rows loadFramesTransposed(const T* frames, std::size_t point) const {
++        Rows rows;
++        for (std::size_t f = 0UZ; f < kLanes; ++f) {
++            rows[f] = load(frames + 2UZ * (f * _size + point));
++        }
++        return transposeSquare(rows);
++    }
++
++    [[gnu::always_inline]] void storeFramesTransposed(const Rows& rows, T* frames, std::size_t point) const {
++        const Rows transposed = transposeSquare(rows);
++        for (std::size_t f = 0UZ; f < kLanes; ++f) {
++            store(transposed[f], frames + 2UZ * (f * _size + point));
++        }
++    }
++
++    // a perfect-shuffle round rotates the row and lane index bits by one, so log2(W) rounds swap them
++    [[gnu::always_inline]] static Rows transposeSquare(Rows rows) {
++        constexpr std::size_t kHalf   = kLanes / 2UZ;
++        constexpr std::size_t kRounds = static_cast<std::size_t>(std::countr_zero(kLanes));
++        for (std::size_t round = 0UZ; round < kRounds; ++round) {
++            Rows next;
++            for (std::size_t i = 0UZ; i < kHalf; ++i) {
++                next[2UZ * i]       = interleaveScalars<false>(rows[i], rows[i + kHalf]);
++                next[2UZ * i + 1UZ] = interleaveScalars<true>(rows[i], rows[i + kHalf]);
++            }
++            rows = next;
++        }
++        return rows;
++    }
++
++#if defined(__cpp_lib_simd) || defined(__glibcxx_simd)
++    [[gnu::always_inline]] static V    load(const T* p) { return std::simd::unchecked_load<V>(p, kLanes); }
++    [[gnu::always_inline]] static void store(const V& v, T* p) { std::simd::unchecked_store(v, p, kLanes); }
++
++    template<bool high>
++    [[gnu::always_inline]] static V interleaveScalars(const V& a, const V& b) {
++        return std::simd::permute<int(kLanes)>(std::simd::cat(a, b), [](int j) { return (j & 1) * int(kLanes) + j / 2 + (high ? int(kLanes) / 2 : 0); });
++    }
++#else
++    [[gnu::always_inline]] static V    load(const T* p) { return V(p, vir::stdx::element_aligned); }
++    [[gnu::always_inline]] static void store(const V& v, T* p) { v.copy_to(p, vir::stdx::element_aligned); }
++
++    // the same shuffle bridge as StockhamKernel: vir has no two-input shuffle; native_simd is one register, so bit_cast is free
++    typedef T GenericVector __attribute__((vector_size(sizeof(T) * kLanes)));
++
++    template<bool high, std::size_t... J>
++    [[gnu::always_inline]] static V interleaveScalars(const V& a, const V& b, std::index_sequence<J...>) {
++        constexpr auto sourceLane = [](std::size_t j) { return int((j & 1UZ) * kLanes + j / 2UZ + (high ? kLanes / 2UZ : 0UZ)); };
++        return std::bit_cast<V>(__builtin_shufflevector(std::bit_cast<GenericVector>(a), std::bit_cast<GenericVector>(b), sourceLane(J)...));
++    }
++    template<bool high>
++    [[gnu::always_inline]] static V interleaveScalars(const V& a, const V& b) {
++        return interleaveScalars<high>(a, b, std::make_index_sequence<kLanes>{});
++    }
++#endif
++
++    [[gnu::always_inline]] static SplitComplex timesMinusJ(const SplitComplex& z) { return {z.im, -z.re}; }
++    [[gnu::always_inline]] static SplitComplex timesW8(const SplitComplex& z) { return {(z.re + z.im) * kInvSqrt2, (z.im - z.re) * kInvSqrt2}; }
++    [[gnu::always_inline]] static SplitComplex timesW8Cubed(const SplitComplex& z) { return {(z.im - z.re) * kInvSqrt2, (z.re + z.im) * -kInvSqrt2}; }
++
++    [[gnu::always_inline]] static void butterfly4(SplitComplex& a, SplitComplex& b, SplitComplex& c, SplitComplex& d) {
++        const SplitComplex apc = a + c;
++        const SplitComplex amc = a - c;
++        const SplitComplex bpd = b + d;
++        const SplitComplex bmd = b - d;
++        a                      = apc + bpd;
++        c                      = apc - bpd;
++        b                      = {amc.re + bmd.im, amc.im - bmd.re};
++        d                      = {amc.re - bmd.im, amc.im + bmd.re};
++    }
++
++    template<std::size_t radix>
++    [[gnu::always_inline]] static void butterfly(SplitComplex* a) {
++        if constexpr (radix == 2UZ) {
++            const SplitComplex sum = a[0] + a[1];
++            a[1]                   = a[0] - a[1];
++            a[0]                   = sum;
++        } else if constexpr (radix == 4UZ) {
++            butterfly4(a[0], a[1], a[2], a[3]);
++        } else {
++            SplitComplex even[4] = {a[0] + a[4], a[1] + a[5], a[2] + a[6], a[3] + a[7]};
++            SplitComplex odd[4]  = {a[0] - a[4], timesW8(a[1] - a[5]), timesMinusJ(a[2] - a[6]), timesW8Cubed(a[3] - a[7])};
++            butterfly4(even[0], even[1], even[2], even[3]);
++            butterfly4(odd[0], odd[1], odd[2], odd[3]);
++            for (std::size_t k = 0UZ; k < 4UZ; ++k) {
++                a[2UZ * k]       = even[k];
++                a[2UZ * k + 1UZ] = odd[k];
++            }
++        }
++    }
++};
++
++#if defined(__GNUC__) && !defined(__clang__)
++#pragma GCC diagnostic pop
++#endif
++
++} // namespace gr::algorithm
++
++#endif // GNURADIO_ALGORITHM_STOCKHAMFFTBATCH_HPP
+-- 
+2.43.0
+

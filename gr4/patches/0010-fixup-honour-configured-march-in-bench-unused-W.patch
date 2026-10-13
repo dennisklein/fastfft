@@ -1,0 +1,47 @@
+From f21b1b80064c24e1377e6b8376b7e485e83c0033 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 13 Oct 2026 15:42:58 +0000
+Subject: [PATCH 10/11] fixup: honour configured -march in bench/, unused W
+
+---
+ algorithm/benchmarks/StockhamFFTFourStep.hpp | 3 +--
+ bench/CMakeLists.txt                         | 2 +-
+ 2 files changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/algorithm/benchmarks/StockhamFFTFourStep.hpp b/algorithm/benchmarks/StockhamFFTFourStep.hpp
+index 514b27c..9afa655 100644
+--- a/algorithm/benchmarks/StockhamFFTFourStep.hpp
++++ b/algorithm/benchmarks/StockhamFFTFourStep.hpp
+@@ -54,7 +54,6 @@ struct StockhamFFTFourStep {
+         assert(N >= kMinSize && std::has_single_bit(N));
+         static_assert(kColumnBlock == 8UZ && kColumnBlock % Kernel::C == 0UZ);
+         constexpr std::size_t C       = Kernel::C;
+-        constexpr std::size_t W       = Kernel::W;
+         const auto            twiddle = [N](std::size_t e) { return std::polar(1.0, -2.0 * std::numbers::pi * static_cast<double>(e) / static_cast<double>(N)); };
+         const std::size_t     log2N   = static_cast<std::size_t>(std::countr_zero(N));
+ 
+@@ -78,7 +77,7 @@ struct StockhamFFTFourStep {
+                 }
+             }
+         }
+-        assert(_laneTwiddles.size() == _n1 * (kColumnBlock / C) * 2UZ * W);
++        assert(_laneTwiddles.size() == _n1 * (kColumnBlock / C) * 2UZ * Kernel::W);
+         _coarseTwiddles.resize(N >> _fineTwiddleBits);
+         for (std::size_t h = 0UZ; h < _coarseTwiddles.size(); ++h) {
+             _coarseTwiddles[h] = std::complex<T>(twiddle(h << _fineTwiddleBits));
+diff --git a/bench/CMakeLists.txt b/bench/CMakeLists.txt
+index 0c9b025..ca98e04 100644
+--- a/bench/CMakeLists.txt
++++ b/bench/CMakeLists.txt
+@@ -7,7 +7,7 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/benchmark.hpp DESTINATION ${CMAKE_INST
+ 
+ function(append_compiler_flags TARGET_NAME)
+   set(FLAGS_COMMON -Wall)
+-  if(EMSCRIPTEN)
++  if(EMSCRIPTEN OR CMAKE_CXX_FLAGS MATCHES "-march=")
+     set(FLAGS_SPECIAL "")
+   else()
+     set(FLAGS_SPECIAL -march=native)
+-- 
+2.43.0
+

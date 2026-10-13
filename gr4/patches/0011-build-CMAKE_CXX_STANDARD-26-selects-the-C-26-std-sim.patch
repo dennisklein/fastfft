@@ -1,0 +1,28 @@
+From 1fe27a1e28a1ae53820253720e3be13f7a8ef46d Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 13 Oct 2026 15:50:54 +0000
+Subject: [PATCH 11/11] build: CMAKE_CXX_STANDARD=26 selects the C++26
+ std::simd preview
+
+---
+ CMakeLists.txt | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index cdce7c6..ffda79e 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -4,7 +4,9 @@ project(
+   gnuradio
+   VERSION 4.0.0
+   LANGUAGES CXX)
+-set(CMAKE_CXX_STANDARD 23)
++if(NOT CMAKE_CXX_STANDARD) # 26 builds the std::simd preview path on a compiler with <simd>
++  set(CMAKE_CXX_STANDARD 23)
++endif()
+ set(CMAKE_CXX_STANDARD_REQUIRED ON)
+ set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+ set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
+-- 
+2.43.0
+

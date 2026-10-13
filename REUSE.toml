@@ -6,6 +6,6 @@ SPDX-FileCopyrightText = "2026 GSI Helmholtz Centre for Heavy Ion Research GmbH"
 SPDX-License-Identifier = "LGPL-3.0-or-later WITH LGPL-3.0-linking-exception"
 
 [[annotations]]
-path = ["doc/**"]
+path = ["doc/**", "results/**"]
 SPDX-FileCopyrightText = "2026 GSI Helmholtz Centre for Heavy Ion Research GmbH"
 SPDX-License-Identifier = "CC-BY-4.0"

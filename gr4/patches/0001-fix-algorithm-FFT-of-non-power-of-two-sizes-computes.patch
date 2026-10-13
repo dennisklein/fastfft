@@ -1,0 +1,134 @@
+From 8f71dc6493f0f3344dc02f8e307a7d6c233d11cc Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 13 Oct 2026 15:29:58 +0000
+Subject: [PATCH 01/11] fix(algorithm): FFT of non-power-of-two sizes computes
+ the forward DFT
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+`FFT::compute` returned wrong spectra for every size that takes the Bluestein path (e.g. N = 3, 100, 1000, 1009): relative error ≈ 1 against a direct DFT on random input.
+A unit impulse, the only input the existing tests used there, transforms correctly either way.
+
+Two errors: the chirp had the inverse sign (`a = x·w`, `b = conj(w)` computes the unscaled inverse DFT), and the convolution's "inverse FFT" was a second forward FFT, which index-reverses the result.
+Now `a = x·conj(w)`, `b = w`, the inverse is `conj(FFT(conj(A·B)))/m`, and the output is multiplied by `conj(w)` [Bluestein 1970].
+
+### Changes
+- `fft.hpp`: `transformBluestein`, `precomputeBluesteinTable`
+- `qa_algorithm_fourier.cpp`: long-double direct DFT on seeded random input, N ∈ {3, 5, 7, 12, 60, 100, 960, 1000, 1009, 1024}, float and double, complex and real input, repeated compute
+---
+ .../gnuradio-4.0/algorithm/fourier/fft.hpp    | 12 ++---
+ algorithm/test/qa_algorithm_fourier.cpp       | 49 +++++++++++++++++++
+ 2 files changed, 55 insertions(+), 6 deletions(-)
+
+diff --git a/algorithm/include/gnuradio-4.0/algorithm/fourier/fft.hpp b/algorithm/include/gnuradio-4.0/algorithm/fourier/fft.hpp
+index 5905a31..b69b4d3 100644
+--- a/algorithm/include/gnuradio-4.0/algorithm/fourier/fft.hpp
++++ b/algorithm/include/gnuradio-4.0/algorithm/fourier/fft.hpp
+@@ -358,7 +358,7 @@ private:
+         using output_alloc_t    = gr::allocator::detail::deduce_output_allocator_t<input_container_t, TOutput>;
+         std::vector<TOutput, output_alloc_t> a(m);
+         for (std::size_t i = 0; i < n; ++i) {
+-            a[i] = detail::complex_mult(inPlace[i], bluesteinExpTable[i]);
++            a[i] = detail::complex_mult(inPlace[i], std::conj(bluesteinExpTable[i]));
+         }
+ 
+         // convolve input with chirp function
+@@ -372,12 +372,12 @@ private:
+         aCache = fftCache->compute(a, aCache); // forward FFT
+ 
+         // pointwise multiply with chirp spectrum
+-        std::transform(aCache.begin(), aCache.end(), bluesteinChirpFFT.begin(), aCache.begin(), std::multiplies<>{});
+-        bCache = fftCache->compute(aCache, bCache); // inverse FFT
++        std::transform(aCache.begin(), aCache.end(), bluesteinChirpFFT.begin(), aCache.begin(), [](auto v, auto w) { return std::conj(v * w); });
++        bCache = fftCache->compute(aCache, bCache); // forward FFT of the conjugate: conj(result) is the unscaled inverse FFT
+ 
+         const ValueType scale = ValueType(1) / ValueType(bCache.size());                          // normalise FFT and scale by 1/N
+         std::transform(bCache.begin(), std::next(bCache.begin(), static_cast<std::ptrdiff_t>(n)), // restrict to signal size (N.B. m > n)
+-            bluesteinExpTable.begin(), inPlace.begin(), [scale](auto v, auto w) { return detail::complex_mult(v * scale, w); });
++            bluesteinExpTable.begin(), inPlace.begin(), [scale](auto v, auto w) { return detail::complex_mult(std::conj(v) * scale, std::conj(w)); });
+     }
+ 
+     void precomputeTwiddleFactors(bool inverse = false) {
+@@ -415,9 +415,9 @@ private:
+ 
+         const std::size_t                                     m = std::bit_ceil(2 * n + 1);
+         std::vector<TOutput, gr::allocator::Aligned<TOutput>> b(m);
+-        b[0] = bluesteinExpTable[0];
++        b[0] = bluesteinExpTable[0]; // X_k = conj(w_k) * sum_i (x_i conj(w_i)) w_(k-i) with w_i = exp(+j pi i^2 / n)
+         for (std::size_t i = 1; i < n; ++i) {
+-            b[i] = b[m - i] = std::conj(bluesteinExpTable[i]);
++            b[i] = b[m - i] = bluesteinExpTable[i];
+         }
+ 
+         FFT<TOutput, TOutput> fft{}; // always power-of-two
+diff --git a/algorithm/test/qa_algorithm_fourier.cpp b/algorithm/test/qa_algorithm_fourier.cpp
+index 637fc87..102d1d8 100644
+--- a/algorithm/test/qa_algorithm_fourier.cpp
++++ b/algorithm/test/qa_algorithm_fourier.cpp
+@@ -5,6 +5,7 @@
+ #include <limits>
+ #include <numbers>
+ #include <numeric>
++#include <random>
+ #include <span>
+ 
+ #include <boost/ut.hpp>
+@@ -410,6 +411,54 @@ const boost::ut::suite<"FFT common kernel-callable cores"> fftCommonCoreTests =
+     };
+ };
+ 
++const boost::ut::suite<"FFT against a long double direct DFT"> fftDirectDftTests = [] {
++    using namespace boost::ut;
++    using gr::algorithm::FFT;
++
++    auto relativeL2Error = []<typename TIn, typename T>(const std::vector<TIn>& input, const std::vector<std::complex<T>>& spectrum) {
++        const std::size_t N        = input.size();
++        long double       errorSum = 0.L, referenceSum = 0.L;
++        for (std::size_t k = 0; k < N; ++k) {
++            std::complex<long double> reference{};
++            for (std::size_t n = 0; n < N; ++n) {
++                reference += std::complex<long double>(input[n]) * std::polar(1.0L, -2.0L * std::numbers::pi_v<long double> * static_cast<long double>((n * k) % N) / static_cast<long double>(N));
++            }
++            errorSum += std::norm(reference - std::complex<long double>(spectrum[k]));
++            referenceSum += std::norm(reference);
++        }
++        return static_cast<double>(std::sqrt(errorSum / referenceSum));
++    };
++
++    "complex FFT matches direct DFT"_test = [&]<typename T>() {
++        constexpr double tolerance = std::is_same_v<T, float> ? 1e-6 : 1e-14;
++        for (const std::size_t N : {3UZ, 5UZ, 7UZ, 12UZ, 60UZ, 100UZ, 960UZ, 1000UZ, 1009UZ, 1024UZ}) {
++            std::mt19937                      gen(42);
++            std::uniform_real_distribution<T> dist(-1, 1);
++            std::vector<std::complex<T>>      input(N);
++            for (auto& v : input) {
++                v = {dist(gen), dist(gen)};
++            }
++            FFT<std::complex<T>> fft;
++            expect(lt(relativeL2Error(input, fft.compute(input)), tolerance)) << std::format("complex N={}", N);
++            expect(lt(relativeL2Error(input, fft.compute(input)), tolerance)) << std::format("complex N={} (reused instance)", N);
++        }
++    } | std::tuple<float, double>{};
++
++    "real FFT matches direct DFT"_test = [&]<typename T>() {
++        constexpr double tolerance = std::is_same_v<T, float> ? 1e-6 : 1e-14;
++        for (const std::size_t N : {1000UZ, 1009UZ}) {
++            std::mt19937                      gen(7);
++            std::uniform_real_distribution<T> dist(-1, 1);
++            std::vector<T>                    input(N);
++            for (auto& v : input) {
++                v = dist(gen);
++            }
++            FFT<T> fft;
++            expect(lt(relativeL2Error(input, fft.compute(input)), tolerance)) << std::format("real N={}", N);
++        }
++    } | std::tuple<float, double>{};
++};
++
+ namespace {
+ constexpr float kWindowedThirdSample = [] {
+     std::array<float, 4>           samples{1.f, 2.f, 3.f, 4.f};
+-- 
+2.43.0
+

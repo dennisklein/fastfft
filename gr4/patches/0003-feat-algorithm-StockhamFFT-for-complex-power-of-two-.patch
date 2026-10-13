@@ -1,7 +1,7 @@
-From de809556071e3d0fccff2a725c88369f2aca5413 Mon Sep 17 00:00:00 2001
+From 2bf41934a0c1a5f2b986d7df8cb76d0a73cf4724 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 13 Oct 2026 15:03:34 +0000
-Subject: [PATCH 2/3] feat(algorithm): StockhamFFT for complex power-of-two
+Subject: [PATCH 03/11] feat(algorithm): StockhamFFT for complex power-of-two
  sizes at native simd width
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -473,7 +473,7 @@ index 0000000..91791a2
 +
 +#endif // GNURADIO_ALGORITHM_STOCKHAMFFT_HPP
 diff --git a/algorithm/include/gnuradio-4.0/algorithm/fourier/fft.hpp b/algorithm/include/gnuradio-4.0/algorithm/fourier/fft.hpp
-index 5905a31..fa01ca8 100644
+index b69b4d3..772a436 100644
 --- a/algorithm/include/gnuradio-4.0/algorithm/fourier/fft.hpp
 +++ b/algorithm/include/gnuradio-4.0/algorithm/fourier/fft.hpp
 @@ -4,12 +4,14 @@
