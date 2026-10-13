@@ -23,13 +23,24 @@ for path in files:
     text = re.sub(r"\x1b\[[0-9;]*m", "", path.read_text(encoding="utf-8"))
     lanes = dict((t, int(w)) for t, w in re.findall(r"(float|double) (\d+)", re.search(r"^simd: .*$", text, re.M).group(0)))
     cpu = re.search(r"^cpu: (.*)$", text, re.M).group(1).strip()
-    hosts.append(f"{cpu} ({path.parent.name}/{path.name})")
+    try:
+        source = path.resolve().relative_to(ROOT / "results")
+    except ValueError:
+        source = path
+    hosts.append(f"{cpu}, results/{source}")
     for type_, n, case, value in re.findall(r"^│ (float|double) N=(\d+) stream: (.+?)\s+│.*│\s*([\d.]+)\s*│\s*$", text, re.M):
         n = int(n)
         if n & (n - 1) or not (case.startswith(("Stockham", "SimdFFT")) or (useSplit and case == "Split")):
             continue
         bits = lanes[type_] * (4 if type_ == "float" else 8) * 8
         ratio[(type_, bits, n)][str(path)][case.replace(" default", "")] = (float(value), case.endswith("default"))
+
+
+def span(worst):
+    if not worst:
+        return "beyond the measured sizes"
+    low, high = f"{min(worst):.2f}", f"{max(worst):.2f}"
+    return f"slowest host at {low if low == high else low + '-' + high} of SimdFFT"
 
 
 def choose(byHost):
@@ -70,7 +81,7 @@ for type_ in ("float", "double"):
                 entries[-1][2].append(note)
             else:
                 entries.append([n.bit_length() - 1, route, [note]])
-        if entries[-1][1][1] is not None or entries[-1][1][0] != "stockham":
+        if entries[-1][1][1] is not None:
             entries.append([None, ("stockham", None), []])
         print(f"\n// {label}, {bits} bit")
         lines = []
@@ -82,7 +93,7 @@ for type_ in ("float", "double"):
                 name = f"kPlan{label}{bits}Bit{len(plans)}"
                 plans.append(f"inline constexpr std::array {name}{{{', '.join(f'{r}UZ' for r in plan)}}};")
                 planArg = f", .plan = {name}"
-            lines.append(f"    FFTRoute{{.maxLog2N = {bound}, .kernel = FFTKernel::{kernel}{planArg}}}, // {f'worst host {min(notes):.2f}-{max(notes):.2f} of SimdFFT' if notes else 'beyond the measured sizes'}")
+            lines.append(f"    FFTRoute{{.maxLog2N = {bound}, .kernel = FFTKernel::{kernel}{planArg}}}, // {span(notes)}")
         if plans:
             print("\n".join(plans))
         print(f"inline constexpr std::array kFFTRoutes{label}{bits}Bit{{\n" + "\n".join(lines) + "\n};")

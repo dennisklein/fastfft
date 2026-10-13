@@ -1,10 +1,10 @@
-From e32d81de71f86b0f22713db8ec308bd1543a6934 Mon Sep 17 00:00:00 2001
+From 27a68638113ccba548be29b047e274c943a25119 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
-Date: Tue, 13 Oct 2026 17:19:38 +0000
-Subject: [PATCH 6/7] perf(algorithm): bm_fft compares FFT kernels and plans
+Date: Tue, 13 Oct 2026 20:29:02 +0000
+Subject: [PATCH 7/7] perf(algorithm): bm_fft compares FFT kernels and plans
  per size and prints this host's route table
 
-Every (type, N) is one interleaved comparison group: `SimdFFT` (reference), `StockhamFFT` with its default and alternative radix plans, the dispatcher `FFT`, each accuracy-checked against a long-double DFT before timing, in `hot` (one frame) and `stream` (frames cycling through 2^16 points) modes.
+Every (type, N) is one interleaved comparison group: `SimdFFT` (reference), `StockhamFFT` with its default and alternative radix plans, `StockhamFFTSplit`, the dispatcher `FFT`, each accuracy-checked against a long-double DFT before timing, in `hot` (one frame) and `stream` (frames cycling through 2^16 points) modes.
 Before the tables the run prints the `FFTRoutes.hpp` tables this host would choose: a candidate replaces the current route only when its paired ratio's 95 % interval lies entirely below.
 Benchmarks keep `-march=native` unless the configuration already sets `-march`, so one host can measure every vector width it supports.
 
@@ -18,9 +18,9 @@ taskset -c 2 env BM_FFT_ROUNDS=40 BM_FFT_MAX_LOG2=20 BM_FFT_MIN_SAMPLE_MS=5 ./bm
 - `algorithm/benchmarks/CMakeLists.txt`, `bench/CMakeLists.txt`: a configured `-march` wins over `-march=native`
 ---
  algorithm/benchmarks/CMakeLists.txt |   3 +
- algorithm/benchmarks/bm_fft.cpp     | 480 +++++++++++++++++++++++++---
+ algorithm/benchmarks/bm_fft.cpp     | 476 ++++++++++++++++++++++++----
  bench/CMakeLists.txt                |   2 +-
- 3 files changed, 431 insertions(+), 54 deletions(-)
+ 3 files changed, 427 insertions(+), 54 deletions(-)
 
 diff --git a/algorithm/benchmarks/CMakeLists.txt b/algorithm/benchmarks/CMakeLists.txt
 index a6a64b3..814dedd 100644
@@ -37,10 +37,10 @@ index a6a64b3..814dedd 100644
      target_compile_options(${BM_NAME} PRIVATE -O2 -march=native)
    endif()
 diff --git a/algorithm/benchmarks/bm_fft.cpp b/algorithm/benchmarks/bm_fft.cpp
-index 093269c..202ccc6 100644
+index 093269c..dddab7c 100644
 --- a/algorithm/benchmarks/bm_fft.cpp
 +++ b/algorithm/benchmarks/bm_fft.cpp
-@@ -1,86 +1,460 @@
+@@ -1,86 +1,456 @@
 +// Forward complex FFT: SimdFFT (the old route) against StockhamFFT plans, experimental variants and the FFT dispatcher; hot and stream cache modes; prints a route table for this host.
 +// BM_FFT_ROUNDS (default 8; rounded up to 3, 8, 20, 40 or 100), BM_FFT_MAX_LOG2 (default 16), BM_FFT_MIN_SAMPLE_MS (default 1): timed rounds, largest N = 2^x, minimum duration of one sample.
 +// Tuning: taskset -c 2 env BM_FFT_ROUNDS=40 BM_FFT_MAX_LOG2=20 BM_FFT_MIN_SAMPLE_MS=5 ./bm_fft
@@ -71,10 +71,6 @@ index 093269c..202ccc6 100644
  
  #include <gnuradio-4.0/algorithm/fourier/fft.hpp>
 -#include <gnuradio-4.0/meta/UnitTestHelper.hpp>
-+
-+#if __has_include("StockhamFFTSplit.hpp")
-+#include "StockhamFFTSplit.hpp"
-+#endif
 +
 +namespace {
 +
@@ -216,13 +212,11 @@ index 093269c..202ccc6 100644
 +            candidates.push_back({.name = planName(plan), .kernel = FFTKernel::stockham, .plan = plan, .run = forwardOf<T>(kernel)});
 +        }
 +
-+#if __has_include("StockhamFFTSplit.hpp")
 +        {
 +            auto kernel = std::make_shared<StockhamFFTSplit<T>>();
 +            kernel->resize(N);
-+            candidates.push_back({.name = "Split", .run = forwardOf<T>(kernel)});
++            candidates.push_back({.name = "Split", .kernel = FFTKernel::stockhamSplit, .isDefaultPlan = true, .run = forwardOf<T>(kernel)});
 +        }
-+#endif
 +    }
 +
 +    auto dispatcher = std::make_shared<FFT<std::complex<T>>>();
@@ -339,7 +333,7 @@ index 093269c..202ccc6 100644
 +RouteChoice chooseRoute(std::size_t N, const std::vector<Measured>& measured) {
 +    const FFTRoute                 current     = fftRoute<T>(N);
 +    const std::vector<std::size_t> currentPlan = current.plan.empty() ? StockhamFFT<T>::defaultPlan(N) : std::vector<std::size_t>(current.plan.begin(), current.plan.end());
-+    const auto                     isCurrent   = [&](const Candidate& c) { return c.kernel == current.kernel && (current.kernel == FFTKernel::simdFft || c.plan == currentPlan); };
++    const auto                     isCurrent   = [&](const Candidate& c) { return c.kernel == current.kernel && (current.kernel != FFTKernel::stockham || c.plan == currentPlan); };
  
 -    using PrecisionType = std::remove_cv_t<typename FFTAlgoPrecision<T>::type>;
 -    using OutputType    = std::complex<PrecisionType>;
@@ -413,6 +407,8 @@ index 093269c..202ccc6 100644
 +        const std::string maxLog2N = entry.maxLog2N == std::numeric_limits<std::size_t>::digits ? "std::numeric_limits<std::size_t>::digits" : std::format("{}UZ", entry.maxLog2N);
 +        if (entry.choice.kernel == FFTKernel::simdFft) {
 +            table += std::format("    FFTRoute{{.maxLog2N = {}, .kernel = FFTKernel::simdFft}},\n", maxLog2N);
++        } else if (entry.choice.kernel == FFTKernel::stockhamSplit) {
++            table += std::format("    FFTRoute{{.maxLog2N = {}, .kernel = FFTKernel::stockhamSplit}},\n", maxLog2N);
 +        } else if (entry.choice.plan.empty()) {
 +            table += std::format("    FFTRoute{{.maxLog2N = {}, .kernel = FFTKernel::stockham}},\n", maxLog2N);
 +        } else {

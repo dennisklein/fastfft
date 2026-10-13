@@ -215,27 +215,30 @@ The gr4-bound commits are prepared for Dennis to sign off (`git commit -s`), one
 4. Measure V6 plans at W = 4, 8, 16 on both hosts; first switch tables.
 5. V2, then V3, then V5, each kept only if the benchmark shows a gain outside the noise.
 
-## 10 · Measured outcomes (Xeon @ 2.1 GHz AVX-512 VM, GCC 15.3, 2026-10-13)
+## 10 · Measured outcomes (2026-10-13)
 
-Run 2 of `bm_fft` (stream mode, 40 interleaved rounds, 5 ms samples) at `-march=x86-64`, `x86-64-v3` and `native`, plus the C++26 path on GCC trunk; raw output in `results/xeon-20261013/run2/`.
-Time of the best StockhamFFT plan relative to `SimdFFT`, range over N = 2^6 .. 2^20:
+Two hosts, each at `-march=x86-64`, `x86-64-v3` and `native`, `bm_fft` stream mode, 40 interleaved rounds, 5 ms samples:
+an Intel Xeon @ 2.1 GHz (AVX-512 VM, GCC 15.3, plus the C++26 path on GCC trunk; `results/xeon-20261013/run2/`) and an AMD Ryzen AI 9 HX 370 (Zen 5, GCC 16.2; `results/zeta-20261013/`).
+`tools/routes.py` merges them: per (type, width, N) the candidate whose slower host is fastest (`results/routes-merged.txt`, copied into `FFTRoutes.hpp`).
+Time of the routed kernel relative to `SimdFFT` on the slower host, range over N = 2^6 .. 2^20:
 
-| target | float | double |
+| width | float | double |
 | --- | ---: | ---: |
-| 128 bit (SSE2) | 0.31 – 0.81 | 0.57 – 0.91 |
-| 256 bit (AVX2) | 0.44 – 0.77 | 0.62 – 1.00 |
-| 512 bit (AVX-512) | 0.32 – 0.65 | 0.54 – 0.80 |
-| 512 bit, C++26 `std::simd` | 0.34 – 0.66 | 0.56 – 0.78 |
+| 128 bit (SSE2) | 0.39 – 0.83 | 0.71 – 1.00 |
+| 256 bit (AVX2) | 0.45 – 0.71 | 0.62 – 0.96 |
+| 512 bit (AVX-512) | 0.37 – 0.74 | 0.63 – 0.99 |
 
 What the measurements decided:
 
-- **V1 + V6** win everywhere measured; the route tables in `FFTRoutes.hpp` are this run's `bm_fft` output, so `FFT` never routes to `SimdFFT` on this host.
-  The earlier 128-bit rule (SimdFFT above 2^14, HX 370) predates the two fixes below and has to be re-measured there.
-- **V2 split** beats the best interleaved plan only at 128 bit for N ≥ 2^15 (float 0.52–0.65, double 0.68–0.81), and loses at small N and at 512 bit; it stays next to the benchmark, not routed.
-- **V3 batch** loses almost everywhere (up to 3.6× slower than V1): the in-register transpose of W frames costs more than the shuffles it saves. Dropped.
+- **V1 + V6** (interleaved Stockham with per-size plans) win at small and mid N on every width and both hosts.
+- **V2 split** wins at large N at 128 bit (float from 2^13) and 256 bit (float from 2^16, some double sizes) on both hosts, and loses at small N and at 512 bit. It is routed there as `StockhamFFTSplit`.
+- **SimdFFT stays** for double at 128 bit, 2^12 and 2^14 .. 2^18, where both Stockham layouts are slower on the HX 370 (up to 1.32×); the Xeon alone would have routed them to Stockham, which is why tables are merged by worst case.
+- **V3 batch** loses almost everywhere (up to 3.6× slower than V1). Dropped.
 - **V5 four-step** never beats the best V1 plan up to 2^20. Dropped; it may return above 2^20.
 - Two causes of slow double code, both fixed in the StockhamFFT commit: gr4's Release `-O2` keeps fixed-count loops rolled (`#pragma GCC unroll`), and at two lanes the 4-scalar bridge vector is not trivially copyable, so swaps went through the stack.
 - The accuracy gate found an upstream bug: every non-power-of-two `FFT` (Bluestein) was wrong; fixed with tests as the first commit.
+
+Adding a host: `tools/measure.sh` on it, commit its `results/<host>-<date>/`, run `tools/routes.py`, and paste the output into `FFTRoutes.hpp`.
 
 ## 11 · References
 

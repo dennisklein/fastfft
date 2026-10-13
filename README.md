@@ -5,6 +5,7 @@ The background experiment and paper are on the `main` branch.
 
 - `doc/design.md`: design and measured outcomes
 - `gr4/patches/`: the patch series for gnuradio4 at `gr4/REVISION`; `gr4/apply.sh [DIR]` clones and applies it
+- `tools/routes.py`: merges every host's `bm_fft` output into the `FFTRoutes.hpp` tables (worst case across hosts)
 - `tools/measure.sh [OUT]`: applies the series, builds and tests per `-march` target, runs `bm_fft` and writes `results/<host>-<date>/` (summary, route tables for `FFTRoutes.hpp`, raw output); options are listed at the top of the script
 - `results/`: measurements per host
 
