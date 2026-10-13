@@ -1,0 +1,4 @@
+[32mSuite 'FFT against a long double direct DFT': all tests passed[0m (44 asserts in 4 tests)
+[32mSuite 'FFT common kernel-callable cores': all tests passed[0m (2534 asserts in 15 tests)
+[32mSuite 'FFT algorithms and window functions': all tests passed[0m (233 asserts in 29 tests)
+[32mSuite 'global': all tests passed[0m (0 asserts in 0 tests)

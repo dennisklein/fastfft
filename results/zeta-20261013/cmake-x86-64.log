@@ -1,0 +1,229 @@
+-- The CXX compiler identification is GNU 16.2.1
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Using default system linker (mold and lld unavailable).
+-- CMake version: 4.3.0
+Building Tests and benchmarks.
+-- Using /usr/bin/c++ to compile the gnuradio_4_0_parse_registrations tool
+-- Configuring parser tool in /home/dklein/projects/fastfft/build/build-x86-64-cxx23/blocklib_generator/tools_build...
+-- Building parser tool in /home/dklein/projects/fastfft/build/build-x86-64-cxx23/blocklib_generator/tools_build...
+-- Parser tool built: /home/dklein/projects/fastfft/build/build-x86-64-cxx23/blocklib_generator/tools_build/gnuradio_4_0_parse_registrations
+-- Is block registry enabled? (faster compile-times and when runtime or Python wrapping APIs are not required) OFF
+-- Is plugin system enabled? OFF
+-- ccache will not be used
+-- Setting compiler warning as errors: ON
+CMake Deprecation Warning at /home/dklein/projects/fastfft/build/build-x86-64-cxx23/_deps/vir-simd-src/CMakeLists.txt:6 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+-- gr4 dep 'vir-simd': resolved (fetch)
+-- gr4 dep 'ut': resolved (fetch)
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- gr4 dep 'cpp-httplib': resolved (fetch)
+-- Could NOT find Python3 (missing: Python3_NumPy_INCLUDE_DIRS NumPy) (found suitable version "3.12.15", minimum required is "3.12")
+INFOPATH include $<BUILD_INTERFACE:/home/dklein/projects/fastfft/build/gnuradio4/core/>
+CMake Deprecation Warning at /home/dklein/projects/fastfft/build/build-x86-64-cxx23/_deps/libsoundio-src/CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+-- The C compiler identification is GNU 16.2.1
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+Configuring libsoundio version 2.0.0
+CMake Warning (dev) at /usr/share/cmake/Modules/FindPackageHandleStandardArgs.cmake:493 (message):
+  The package name passed to find_package_handle_standard_args() (PULSEAUDIO)
+  does not match the name of the calling package (PulseAudio).  This can lead
+  to problems in calling code that expects find_package() result variables
+  (e.g., `_FOUND`) to follow a certain pattern.
+Call Stack (most recent call first):
+  /home/dklein/projects/fastfft/build/build-x86-64-cxx23/_deps/libsoundio-src/cmake/FindPulseAudio.cmake:14 (find_package_handle_standard_args)
+  /home/dklein/projects/fastfft/build/build-x86-64-cxx23/_deps/libsoundio-src/CMakeLists.txt:65 (find_package)
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Could NOT find PULSEAUDIO (missing: PULSEAUDIO_LIBRARY PULSEAUDIO_INCLUDE_DIR) 
+-- Could NOT find ALSA (missing: ALSA_LIBRARY ALSA_INCLUDE_DIR) 
+CMake Warning (dev) at /usr/share/cmake/Modules/FindPackageHandleStandardArgs.cmake:493 (message):
+  The package name passed to find_package_handle_standard_args() (COREAUDIO)
+  does not match the name of the calling package (CoreAudio).  This can lead
+  to problems in calling code that expects find_package() result variables
+  (e.g., `_FOUND`) to follow a certain pattern.
+Call Stack (most recent call first):
+  /home/dklein/projects/fastfft/build/build-x86-64-cxx23/_deps/libsoundio-src/cmake/FindCoreAudio.cmake:14 (find_package_handle_standard_args)
+  /home/dklein/projects/fastfft/build/build-x86-64-cxx23/_deps/libsoundio-src/CMakeLists.txt:99 (find_package)
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Could NOT find COREAUDIO (missing: COREAUDIO_LIBRARY COREAUDIO_INCLUDE_DIR) 
+-- Could NOT find WASAPI (missing: AUDIOCLIENT_H) 
+
+Installation Summary
+--------------------
+* Install Directory            : /usr/local
+* Build Type                   : Release
+* Build static libs            : ON
+* Build examples               : OFF
+* Build tests                  : OFF
+
+System Dependencies
+-------------------
+* threads                      : OK
+* JACK       (optional)        : disabled
+* PulseAudio (optional)        : not found
+* ALSA       (optional)        : not found
+* CoreAudio  (optional)        : not found
+* WASAPI     (optional)        : not found
+
+-- gr4 dep 'libsoundio': resolved (fetch)
+CMake Warning at /home/dklein/projects/fastfft/build/build-x86-64-cxx23/blocklib_generator/GnuRadioBlockLibMacros.cmake:267 (message):
+  GR_ENABLE_BLOCK_REGISTRY is set to Off, not generating libraries for
+  GrAudioBlocks
+Call Stack (most recent call first):
+  blocks/audio/CMakeLists.txt:75 (gr_add_block_library)
+
+
+CMake Warning at /home/dklein/projects/fastfft/build/build-x86-64-cxx23/blocklib_generator/GnuRadioBlockLibMacros.cmake:267 (message):
+  GR_ENABLE_BLOCK_REGISTRY is set to Off, not generating libraries for
+  GrBasicBlocks
+Call Stack (most recent call first):
+  blocks/basic/CMakeLists.txt:45 (gr_add_block_library)
+
+
+-- ###Python Include Dirs: /home/dklein/.local/share/mise/installs/python/3.12/include/python3.12
+CMake Warning at /home/dklein/projects/fastfft/build/build-x86-64-cxx23/blocklib_generator/GnuRadioBlockLibMacros.cmake:267 (message):
+  GR_ENABLE_BLOCK_REGISTRY is set to Off, not generating libraries for
+  GrElectricalBlocks
+Call Stack (most recent call first):
+  blocks/electrical/CMakeLists.txt:10 (gr_add_block_library)
+
+
+CMake Warning at /home/dklein/projects/fastfft/build/build-x86-64-cxx23/blocklib_generator/GnuRadioBlockLibMacros.cmake:267 (message):
+  GR_ENABLE_BLOCK_REGISTRY is set to Off, not generating libraries for
+  GrFileIoBlocks
+Call Stack (most recent call first):
+  blocks/fileio/CMakeLists.txt:10 (gr_add_block_library)
+
+
+CMake Warning at /home/dklein/projects/fastfft/build/build-x86-64-cxx23/blocklib_generator/GnuRadioBlockLibMacros.cmake:267 (message):
+  GR_ENABLE_BLOCK_REGISTRY is set to Off, not generating libraries for
+  GrFilterBlocks
+Call Stack (most recent call first):
+  blocks/filter/CMakeLists.txt:10 (gr_add_block_library)
+
+
+-- Performing Test GR_FILTER_BM_HAS_MARCH_NATIVE
+-- Performing Test GR_FILTER_BM_HAS_MARCH_NATIVE - Success
+CMake Warning at /home/dklein/projects/fastfft/build/build-x86-64-cxx23/blocklib_generator/GnuRadioBlockLibMacros.cmake:267 (message):
+  GR_ENABLE_BLOCK_REGISTRY is set to Off, not generating libraries for
+  GrFourierBlocks
+Call Stack (most recent call first):
+  blocks/fourier/CMakeLists.txt:10 (gr_add_block_library)
+
+
+CMake Warning at /home/dklein/projects/fastfft/build/build-x86-64-cxx23/blocklib_generator/GnuRadioBlockLibMacros.cmake:267 (message):
+  GR_ENABLE_BLOCK_REGISTRY is set to Off, not generating libraries for
+  GrHttpBlocks
+Call Stack (most recent call first):
+  blocks/http/CMakeLists.txt:10 (gr_add_block_library)
+
+
+CMake Warning at /home/dklein/projects/fastfft/build/build-x86-64-cxx23/blocklib_generator/GnuRadioBlockLibMacros.cmake:267 (message):
+  GR_ENABLE_BLOCK_REGISTRY is set to Off, not generating libraries for
+  GrMathBlocks
+Call Stack (most recent call first):
+  blocks/math/CMakeLists.txt:10 (gr_add_block_library)
+
+
+-- gr-onnx: no system onnxruntime or bundled static lib found
+-- gr-onnx: install via package manager, set ORT_STATIC_LIB_DIR, or use ENABLE_ONNX_INTEGRATION=on
+-- gr4 dep 'SoapySDR': not available (mode=system)
+CMake Warning at /home/dklein/projects/fastfft/build/build-x86-64-cxx23/blocklib_generator/GnuRadioBlockLibMacros.cmake:267 (message):
+  GR_ENABLE_BLOCK_REGISTRY is set to Off, not generating libraries for
+  GrTestingBlocks
+Call Stack (most recent call first):
+  blocks/testing/CMakeLists.txt:10 (gr_add_block_library)
+
+
+-- The following OPTIONAL packages have been found:
+
+ * ut, Boost.UT C++20 unit-test framework, <https://github.com/boost-ext/ut>
+   GR4 unit tests and benchmarks (ENABLE_TESTING/ENABLE_BENCHMARKS)
+ * ZLIB
+ * Brotli
+ * httplib, Header-only HTTP client/server, <https://github.com/yhirose/cpp-httplib>
+   HTTP-based unit tests (ENABLE_TESTING)
+ * Git
+ * LibSoundIo, Cross-platform audio I/O, <http://libsound.io>
+   blocks/audio source/sink (system shared lib via cmake/FindLibSoundIo.cmake, or patched fetch)
+ * PkgConfig
+
+-- The following REQUIRED packages have been found:
+
+ * vir-simd, C++ SIMD wrapper / std::simd shim, <https://github.com/mattkretz/vir-simd>
+   core SIMD operations across all GR4 modules
+ * Threads
+
+-- The following OPTIONAL packages have not been found:
+
+ * OpenSSL (required version >= 3.0.0)
+ * Python3 (required version >= 3.12)
+ * PulseAudio
+ * ALSA
+ * CoreAudio
+ * WASAPI
+ * onnxruntime
+ * SoapySDR, SDR hardware abstraction, <https://github.com/pothosware/SoapySDR>
+   blocks/sdr (system version may be incompatible with libc++)
+
+-- ================================================
+-- GR-4 build configuration
+-- ------------------------------------------------
+-- GR_TOPLEVEL_PROJECT          : ON
+-- GR_DEPENDENCY_MODE           : system-or-fetch
+-- GR_ENABLE_BLOCK_REGISTRY     : OFF
+-- INTERNAL_ENABLE_BLOCK_PLUGINS: OFF
+-- USE_CCACHE                   : ON
+-- WARNINGS_AS_ERRORS           : ON
+-- TIMETRACE                    : OFF
+-- ADDRESS_SANITIZER            : OFF
+-- UB_SANITIZER                 : OFF
+-- THREAD_SANITIZER             : OFF
+-- ENABLE_TBB                   : OFF
+-- ENABLE_EXAMPLES              : OFF
+-- ENABLE_TESTING               : ON
+-- ENABLE_BENCHMARKS            : ON
+-- ENABLE_COVERAGE              : 
+-- GR_MAX_WASM_THREAD_COUNT     : 60
+-- GR_ENABLE_HTTP               : OFF
+-- ------------------------------------------------
+-- Effective compiler flags : -march=x86-64 -O2 -g0 -DNDEBUG -ffunction-sections -fdata-sections $<BUILD_INTERFACE:-Wall -Wextra -Wshadow -Wnon-virtual-dtor -Wold-style-cast -Wcast-align -Wunused -Woverloaded-virtual -Wpedantic -Wconversion -Wsign-conversion -Wnull-dereference -Wdouble-promotion -Wformat=2 -Wno-unknown-pragmas -Wno-unused-command-line-argument -Werror -Wno-dangling-reference -Wmisleading-indentation -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -Wno-interference-size -Wno-maybe-uninitialized -Wno-tautological-compare -fconcepts-diagnostics-depth=3 -Wno-missing-field-initializers>
+-- Effective linker flags   : -Wl,--gc-sections -ffunction-sections -fdata-sections
+-- ------------------------------------------------
+-- Toolchain details
+-- ------------------------------------------------
+-- C++ compiler ID          : GNU
+-- GR_USE_ADAPTIVE_CPP?     : OFF
+-- C++ compiler path        : /usr/bin/c++
+-- C++ compiler version     : 16.2.1
+-- Linker                   : /usr/bin/ld (default/provided linker)
+-- ccache                   : not found or disabled
+-- ================================================
+-- Configuring done (12.3s)
+-- Generating done (0.2s)
+-- Build files have been written to: /home/dklein/projects/fastfft/build/build-x86-64-cxx23

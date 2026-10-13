@@ -1,0 +1,36 @@
+[  0%] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/PluginLoader.cpp.o
+[  0%] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/SharedLibrary.cpp.o
+[  0%] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/Settings.cpp.o
+[  0%] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/BlockModel.cpp.o
+[ 25%] Built target gr-basic
+[ 25%] Built target ut-benchmark
+[  0%] Building CXX object CMakeFiles/exprtk.dir/third_party/exprtk.cpp.o
+[ 25%] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/Block.cpp.o
+[ 25%] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/Logger.cpp.o
+[ 25%] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/Value.cpp.o
+[ 25%] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/ValueHelper.cpp.o
+[ 50%] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/PmtTypeHelpers.cpp.o
+[ 50%] Building CXX object core/CMakeFiles/gnuradio-core.dir/src/Graph.cpp.o
+[ 75%] Linking CXX static library libgnuradio-core.a
+[ 75%] Built target gnuradio-core
+[ 75%] Building CXX object core/CMakeFiles/gnuradio-blocklib-core.dir/src/BlockRegistry.cpp.o
+[100%] Linking CXX shared library libgnuradio-blocklib-core.so
+[100%] Built target gnuradio-blocklib-core
+[100%] Linking CXX static library libexprtk.a
+[100%] Built target exprtk
+[100%] Building CXX object algorithm/test/CMakeFiles/qa_StockhamFFT.dir/qa_StockhamFFT.cpp.o
+[100%] Linking CXX executable qa_StockhamFFT
+[100%] Built target qa_StockhamFFT
+[  0%] Built target gr-basic
+[  0%] Built target ut-benchmark
+[  0%] Built target exprtk
+[ 75%] Built target gnuradio-core
+[100%] Built target gnuradio-blocklib-core
+[100%] Building CXX object algorithm/test/CMakeFiles/qa_algorithm_fourier.dir/qa_algorithm_fourier.cpp.o
+[100%] Linking CXX executable qa_algorithm_fourier
+[100%] Built target qa_algorithm_fourier
+[  0%] Built target ut-benchmark
+[100%] Built target gnuradio-core
+[100%] Building CXX object algorithm/benchmarks/CMakeFiles/bm_fft.dir/bm_fft.cpp.o
+[100%] Linking CXX executable bm_fft
+[100%] Built target bm_fft
