@@ -1,4 +1,7 @@
 // merged by tools/routes.py from:
+//   AMD EPYC 9654 96-Core Processor, results/epyc9654-20261013/bm-native.txt
+//   AMD EPYC 9654 96-Core Processor, results/epyc9654-20261013/bm-x86-64-v3.txt
+//   AMD EPYC 9654 96-Core Processor, results/epyc9654-20261013/bm-x86-64.txt
 //   Intel(R) Xeon(R) Processor @ 2.10GHz, results/xeon-20261013/run2/bm-avx2.txt
 //   Intel(R) Xeon(R) Processor @ 2.10GHz, results/xeon-20261013/run2/bm-avx512.txt
 //   Intel(R) Xeon(R) Processor @ 2.10GHz, results/xeon-20261013/run2/bm-sse.txt
@@ -9,14 +12,12 @@
 // Float, 128 bit
 inline constexpr std::array kFFTRoutesFloat128Bit{
     FFTRoute{.maxLog2N = 12UZ, .kernel = FFTKernel::stockham}, // slowest host at 0.39-0.61 of SimdFFT
-    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockhamSplit}, // slowest host at 0.65-0.83 of SimdFFT
+    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockhamSplit}, // slowest host at 0.67-0.83 of SimdFFT
 };
 
 // Float, 256 bit
-inline constexpr std::array kPlanFloat256Bit0{8UZ, 16UZ, 16UZ, 8UZ, 2UZ};
 inline constexpr std::array kFFTRoutesFloat256Bit{
-    FFTRoute{.maxLog2N = 14UZ, .kernel = FFTKernel::stockham}, // slowest host at 0.45-0.60 of SimdFFT
-    FFTRoute{.maxLog2N = 15UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat256Bit0}, // slowest host at 0.63 of SimdFFT
+    FFTRoute{.maxLog2N = 12UZ, .kernel = FFTKernel::stockham}, // slowest host at 0.45-0.59 of SimdFFT
     FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockhamSplit}, // slowest host at 0.57-0.71 of SimdFFT
 };
 
@@ -25,8 +26,8 @@ inline constexpr std::array kPlanFloat512Bit0{8UZ, 16UZ, 16UZ, 4UZ, 4UZ};
 inline constexpr std::array kPlanFloat512Bit1{8UZ, 16UZ, 16UZ, 8UZ, 2UZ, 16UZ};
 inline constexpr std::array kPlanFloat512Bit2{8UZ, 2UZ, 16UZ, 16UZ, 16UZ, 16UZ};
 inline constexpr std::array kFFTRoutesFloat512Bit{
-    FFTRoute{.maxLog2N = 14UZ, .kernel = FFTKernel::stockham}, // slowest host at 0.37-0.45 of SimdFFT
-    FFTRoute{.maxLog2N = 15UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit0}, // slowest host at 0.49 of SimdFFT
+    FFTRoute{.maxLog2N = 14UZ, .kernel = FFTKernel::stockham}, // slowest host at 0.39-0.48 of SimdFFT
+    FFTRoute{.maxLog2N = 15UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit0}, // slowest host at 0.51 of SimdFFT
     FFTRoute{.maxLog2N = 18UZ, .kernel = FFTKernel::stockham}, // slowest host at 0.60-0.63 of SimdFFT
     FFTRoute{.maxLog2N = 19UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit1}, // slowest host at 0.74 of SimdFFT
     FFTRoute{.maxLog2N = 20UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit2}, // slowest host at 0.65 of SimdFFT
@@ -38,43 +39,41 @@ inline constexpr std::array kPlanDouble128Bit0{8UZ, 4UZ, 4UZ};
 inline constexpr std::array kPlanDouble128Bit1{8UZ, 4UZ, 4UZ, 2UZ};
 inline constexpr std::array kPlanDouble128Bit2{8UZ, 4UZ, 4UZ, 4UZ};
 inline constexpr std::array kPlanDouble128Bit3{8UZ, 4UZ, 4UZ, 8UZ};
-inline constexpr std::array kPlanDouble128Bit4{8UZ, 16UZ, 4UZ, 4UZ, 4UZ};
+inline constexpr std::array kPlanDouble128Bit4{8UZ, 16UZ, 4UZ, 4UZ};
 inline constexpr std::array kFFTRoutesDouble128Bit{
     FFTRoute{.maxLog2N = 6UZ, .kernel = FFTKernel::stockham}, // slowest host at 0.80 of SimdFFT
     FFTRoute{.maxLog2N = 7UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit0}, // slowest host at 0.75 of SimdFFT
     FFTRoute{.maxLog2N = 8UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit1}, // slowest host at 0.87 of SimdFFT
     FFTRoute{.maxLog2N = 9UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit2}, // slowest host at 0.82 of SimdFFT
     FFTRoute{.maxLog2N = 10UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit3}, // slowest host at 0.86 of SimdFFT
-    FFTRoute{.maxLog2N = 11UZ, .kernel = FFTKernel::stockham}, // slowest host at 0.92 of SimdFFT
-    FFTRoute{.maxLog2N = 12UZ, .kernel = FFTKernel::simdFft}, // slowest host at 1.00 of SimdFFT
-    FFTRoute{.maxLog2N = 13UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit4}, // slowest host at 0.98 of SimdFFT
-    FFTRoute{.maxLog2N = 18UZ, .kernel = FFTKernel::simdFft}, // slowest host at 1.00 of SimdFFT
-    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockhamSplit}, // slowest host at 0.71-0.79 of SimdFFT
+    FFTRoute{.maxLog2N = 11UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit4}, // slowest host at 0.95 of SimdFFT
+    FFTRoute{.maxLog2N = 19UZ, .kernel = FFTKernel::simdFft}, // slowest host at 1.00 of SimdFFT
+    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockhamSplit}, // slowest host at 0.94 of SimdFFT
 };
 
 // Double, 256 bit
 inline constexpr std::array kPlanDouble256Bit0{8UZ, 2UZ, 16UZ};
-inline constexpr std::array kPlanDouble256Bit1{8UZ, 16UZ, 16UZ, 4UZ, 4UZ, 4UZ};
+inline constexpr std::array kPlanDouble256Bit1{8UZ, 16UZ, 4UZ, 4UZ, 4UZ};
+inline constexpr std::array kPlanDouble256Bit2{8UZ, 16UZ, 4UZ, 4UZ, 8UZ};
 inline constexpr std::array kFFTRoutesDouble256Bit{
     FFTRoute{.maxLog2N = 7UZ, .kernel = FFTKernel::stockham}, // slowest host at 0.62-0.69 of SimdFFT
-    FFTRoute{.maxLog2N = 8UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble256Bit0}, // slowest host at 0.64 of SimdFFT
-    FFTRoute{.maxLog2N = 14UZ, .kernel = FFTKernel::stockham}, // slowest host at 0.66-0.80 of SimdFFT
-    FFTRoute{.maxLog2N = 16UZ, .kernel = FFTKernel::stockhamSplit}, // slowest host at 0.80-0.88 of SimdFFT
-    FFTRoute{.maxLog2N = 17UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble256Bit1}, // slowest host at 0.75 of SimdFFT
-    FFTRoute{.maxLog2N = 19UZ, .kernel = FFTKernel::stockham}, // slowest host at 0.70-0.96 of SimdFFT
-    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockhamSplit}, // slowest host at 0.71 of SimdFFT
+    FFTRoute{.maxLog2N = 8UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble256Bit0}, // slowest host at 0.70 of SimdFFT
+    FFTRoute{.maxLog2N = 11UZ, .kernel = FFTKernel::stockham}, // slowest host at 0.70-0.76 of SimdFFT
+    FFTRoute{.maxLog2N = 12UZ, .kernel = FFTKernel::stockhamSplit}, // slowest host at 0.94 of SimdFFT
+    FFTRoute{.maxLog2N = 13UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble256Bit1}, // slowest host at 0.97 of SimdFFT
+    FFTRoute{.maxLog2N = 14UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble256Bit2}, // slowest host at 0.94 of SimdFFT
+    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockhamSplit}, // slowest host at 0.71-0.96 of SimdFFT
 };
 
 // Double, 512 bit
 inline constexpr std::array kPlanDouble512Bit0{8UZ, 2UZ, 16UZ};
-inline constexpr std::array kPlanDouble512Bit1{8UZ, 16UZ, 16UZ, 4UZ, 4UZ, 4UZ};
-inline constexpr std::array kPlanDouble512Bit2{8UZ, 2UZ, 16UZ, 16UZ, 16UZ, 16UZ};
+inline constexpr std::array kPlanDouble512Bit1{8UZ, 16UZ, 16UZ, 4UZ, 4UZ, 16UZ};
 inline constexpr std::array kFFTRoutesDouble512Bit{
     FFTRoute{.maxLog2N = 7UZ, .kernel = FFTKernel::stockham}, // slowest host at 0.66-0.71 of SimdFFT
     FFTRoute{.maxLog2N = 8UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble512Bit0}, // slowest host at 0.74 of SimdFFT
-    FFTRoute{.maxLog2N = 16UZ, .kernel = FFTKernel::stockham}, // slowest host at 0.63-0.80 of SimdFFT
-    FFTRoute{.maxLog2N = 17UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble512Bit1}, // slowest host at 0.70 of SimdFFT
-    FFTRoute{.maxLog2N = 19UZ, .kernel = FFTKernel::stockham}, // slowest host at 0.67-0.99 of SimdFFT
-    FFTRoute{.maxLog2N = 20UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble512Bit2}, // slowest host at 0.68 of SimdFFT
-    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockham}, // beyond the measured sizes
+    FFTRoute{.maxLog2N = 16UZ, .kernel = FFTKernel::stockham}, // slowest host at 0.63-0.83 of SimdFFT
+    FFTRoute{.maxLog2N = 17UZ, .kernel = FFTKernel::simdFft}, // slowest host at 1.00 of SimdFFT
+    FFTRoute{.maxLog2N = 18UZ, .kernel = FFTKernel::stockham}, // slowest host at 0.99 of SimdFFT
+    FFTRoute{.maxLog2N = 19UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble512Bit1}, // slowest host at 0.75 of SimdFFT
+    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockham}, // slowest host at 0.75 of SimdFFT
 };
