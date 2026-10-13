@@ -1,0 +1,4 @@
+[32mSuite 'FFT routing': all tests passed[0m (154 asserts in 4 tests)
+[32mSuite 'StockhamFFTSplit': all tests passed[0m (63 asserts in 9 tests)
+[32mSuite 'StockhamFFT': all tests passed[0m (1218 asserts in 14 tests)
+[32mSuite 'global': all tests passed[0m (0 asserts in 0 tests)

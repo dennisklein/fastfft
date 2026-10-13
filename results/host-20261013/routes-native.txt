@@ -1,0 +1,39 @@
+// Float, W = 16, measured for N = 2^6 .. 2^20 in stream mode
+inline constexpr std::array kPlanFloat512Bit0{8UZ, 2UZ, 16UZ};
+inline constexpr std::array kPlanFloat512Bit1{8UZ, 16UZ, 2UZ, 16UZ};
+inline constexpr std::array kPlanFloat512Bit2{8UZ, 16UZ, 16UZ, 8UZ, 2UZ};
+inline constexpr std::array kPlanFloat512Bit3{8UZ, 16UZ, 16UZ, 2UZ, 16UZ};
+inline constexpr std::array kPlanFloat512Bit4{8UZ, 16UZ, 16UZ, 4UZ, 16UZ};
+inline constexpr std::array kPlanFloat512Bit5{8UZ, 16UZ, 16UZ, 2UZ, 8UZ, 8UZ};
+inline constexpr std::array kPlanFloat512Bit6{8UZ, 2UZ, 16UZ, 16UZ, 16UZ, 16UZ};
+inline constexpr std::array kFFTRoutesFloat512Bit{
+    FFTRoute{.maxLog2N = 7UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 8UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit0},
+    FFTRoute{.maxLog2N = 11UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 12UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit1},
+    FFTRoute{.maxLog2N = 14UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 15UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit2},
+    FFTRoute{.maxLog2N = 16UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit3},
+    FFTRoute{.maxLog2N = 17UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit4},
+    FFTRoute{.maxLog2N = 18UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit5},
+    FFTRoute{.maxLog2N = 19UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 20UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit6},
+    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockham},
+};
+// Double, W = 8, measured for N = 2^6 .. 2^20 in stream mode
+inline constexpr std::array kPlanDouble512Bit0{8UZ, 2UZ, 16UZ};
+inline constexpr std::array kPlanDouble512Bit1{8UZ, 2UZ, 8UZ, 16UZ, 2UZ};
+inline constexpr std::array kPlanDouble512Bit2{8UZ, 16UZ, 16UZ, 4UZ, 4UZ, 16UZ};
+inline constexpr std::array kPlanDouble512Bit3{8UZ, 16UZ, 2UZ, 16UZ, 16UZ, 16UZ};
+inline constexpr std::array kFFTRoutesDouble512Bit{
+    FFTRoute{.maxLog2N = 7UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 8UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble512Bit0},
+    FFTRoute{.maxLog2N = 11UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 12UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble512Bit1},
+    FFTRoute{.maxLog2N = 16UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 17UZ, .kernel = FFTKernel::simdFft},
+    FFTRoute{.maxLog2N = 18UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 19UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble512Bit2},
+    FFTRoute{.maxLog2N = 20UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble512Bit3},
+    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockham},
+};

@@ -1,0 +1,26 @@
+// Float, W = 4, measured for N = 2^6 .. 2^20 in stream mode
+inline constexpr std::array kPlanFloat128Bit0{8UZ, 8UZ, 16UZ};
+inline constexpr std::array kPlanFloat128Bit1{8UZ, 16UZ, 2UZ, 16UZ};
+inline constexpr std::array kFFTRoutesFloat128Bit{
+    FFTRoute{.maxLog2N = 9UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 10UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat128Bit0},
+    FFTRoute{.maxLog2N = 11UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 12UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat128Bit1},
+    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockhamSplit},
+};
+// Double, W = 2, measured for N = 2^6 .. 2^20 in stream mode
+inline constexpr std::array kPlanDouble128Bit0{8UZ, 4UZ, 4UZ};
+inline constexpr std::array kPlanDouble128Bit1{8UZ, 4UZ, 4UZ, 2UZ};
+inline constexpr std::array kPlanDouble128Bit2{8UZ, 4UZ, 4UZ, 4UZ};
+inline constexpr std::array kPlanDouble128Bit3{8UZ, 4UZ, 4UZ, 8UZ};
+inline constexpr std::array kPlanDouble128Bit4{8UZ, 16UZ, 4UZ, 4UZ};
+inline constexpr std::array kFFTRoutesDouble128Bit{
+    FFTRoute{.maxLog2N = 6UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 7UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit0},
+    FFTRoute{.maxLog2N = 8UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit1},
+    FFTRoute{.maxLog2N = 9UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit2},
+    FFTRoute{.maxLog2N = 10UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit3},
+    FFTRoute{.maxLog2N = 11UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble128Bit4},
+    FFTRoute{.maxLog2N = 19UZ, .kernel = FFTKernel::simdFft},
+    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockhamSplit},
+};

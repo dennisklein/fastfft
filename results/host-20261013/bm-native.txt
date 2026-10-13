@@ -1,0 +1,650 @@
+compiler: gcc 16.2.1 20260819 (Red Hat 16.2.1-2)
+simd: native, vir::stdx; W: float 16, double 8
+cpu: AMD EPYC 9654 96-Core Processor
+ops/s are scaled with 5 N log2(N); stream cases process 65536 points per call, hot cases one frame
+
+// Float, W = 16, measured for N = 2^6 .. 2^20 in stream mode
+inline constexpr std::array kPlanFloat512Bit0{8UZ, 2UZ, 16UZ};
+inline constexpr std::array kPlanFloat512Bit1{8UZ, 16UZ, 2UZ, 16UZ};
+inline constexpr std::array kPlanFloat512Bit2{8UZ, 16UZ, 16UZ, 8UZ, 2UZ};
+inline constexpr std::array kPlanFloat512Bit3{8UZ, 16UZ, 16UZ, 2UZ, 16UZ};
+inline constexpr std::array kPlanFloat512Bit4{8UZ, 16UZ, 16UZ, 4UZ, 16UZ};
+inline constexpr std::array kPlanFloat512Bit5{8UZ, 16UZ, 16UZ, 2UZ, 8UZ, 8UZ};
+inline constexpr std::array kPlanFloat512Bit6{8UZ, 2UZ, 16UZ, 16UZ, 16UZ, 16UZ};
+inline constexpr std::array kFFTRoutesFloat512Bit{
+    FFTRoute{.maxLog2N = 7UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 8UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit0},
+    FFTRoute{.maxLog2N = 11UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 12UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit1},
+    FFTRoute{.maxLog2N = 14UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 15UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit2},
+    FFTRoute{.maxLog2N = 16UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit3},
+    FFTRoute{.maxLog2N = 17UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit4},
+    FFTRoute{.maxLog2N = 18UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit5},
+    FFTRoute{.maxLog2N = 19UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 20UZ, .kernel = FFTKernel::stockham, .plan = kPlanFloat512Bit6},
+    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockham},
+};
+
+// Double, W = 8, measured for N = 2^6 .. 2^20 in stream mode
+inline constexpr std::array kPlanDouble512Bit0{8UZ, 2UZ, 16UZ};
+inline constexpr std::array kPlanDouble512Bit1{8UZ, 2UZ, 8UZ, 16UZ, 2UZ};
+inline constexpr std::array kPlanDouble512Bit2{8UZ, 16UZ, 16UZ, 4UZ, 4UZ, 16UZ};
+inline constexpr std::array kPlanDouble512Bit3{8UZ, 16UZ, 2UZ, 16UZ, 16UZ, 16UZ};
+inline constexpr std::array kFFTRoutesDouble512Bit{
+    FFTRoute{.maxLog2N = 7UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 8UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble512Bit0},
+    FFTRoute{.maxLog2N = 11UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 12UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble512Bit1},
+    FFTRoute{.maxLog2N = 16UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 17UZ, .kernel = FFTKernel::simdFft},
+    FFTRoute{.maxLog2N = 18UZ, .kernel = FFTKernel::stockham},
+    FFTRoute{.maxLog2N = 19UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble512Bit2},
+    FFTRoute{.maxLog2N = 20UZ, .kernel = FFTKernel::stockham, .plan = kPlanDouble512Bit3},
+    FFTRoute{.maxLog2N = std::numeric_limits<std::size_t>::digits, .kernel = FFTKernel::stockham},
+};
+all micro-benchmarks passed:
+┌───────────────────────────benchmark:────────────────────────────┬──────┬─#N──┬───min───┬──mean───┬─stddev──┬─median──┬────median CI95─────┬─ops/s─┬─rel MAD─┬───ratio CI95───┬───max───┬─total time─┬─ratio─┐
+│ float N=64 hot: SimdFFT                                         │ PASS │ 40  │  136 ns │  137 ns │  714 ps │  137 ns │   [137 ns, 138 ns] │ 14.0G │  0.43 % │ [1.000, 1.000] │  139 ns │     360 ms │ 1.000 │
+│ float N=64 hot: Stockham 8·8 default                            │ PASS │ 40  │ 68.8 ns │ 69.3 ns │  272 ps │ 69.3 ns │ [69.2 ns, 69.4 ns] │ 27.7G │  0.28 % │ [0.503, 0.506] │ 70.1 ns │     363 ms │ 0.504 │
+│ float N=64 hot: Stockham 8·2·4                                  │ PASS │ 40  │ 76.1 ns │ 76.9 ns │  463 ps │ 76.8 ns │ [76.6 ns, 77.1 ns] │ 25.0G │  0.51 % │ [0.558, 0.561] │ 77.8 ns │     201 ms │ 0.559 │
+│ float N=64 hot: Stockham 8·4·2                                  │ PASS │ 40  │ 75.1 ns │ 76.4 ns │  484 ps │ 76.3 ns │ [76.1 ns, 76.5 ns] │ 25.2G │  0.40 % │ [0.554, 0.557] │ 77.4 ns │     200 ms │ 0.555 │
+│ float N=64 hot: Split                                           │ PASS │ 40  │ 63.9 ns │ 64.3 ns │  192 ps │ 64.3 ns │ [64.2 ns, 64.3 ns] │ 29.9G │  0.17 % │ [0.466, 0.469] │ 64.8 ns │     337 ms │ 0.468 │
+│ float N=64 hot: FFT                                             │ PASS │ 40  │ 68.7 ns │ 70.0 ns │  500 ps │ 70.0 ns │ [69.7 ns, 70.2 ns] │ 27.4G │  0.60 % │ [0.508, 0.512] │ 71.1 ns │     367 ms │ 0.510 │
+│ float N=64 stream: SimdFFT                                      │ PASS │ 40  │  136 us │  137 us │  303 ns │  137 us │   [136 us, 137 us] │ 14.4G │  0.19 % │ [1.000, 1.000] │  137 us │     350 ms │ 1.000 │
+│ float N=64 stream: Stockham 8·8 default                         │ PASS │ 40  │ 57.9 us │ 58.6 us │  470 ns │ 58.5 us │ [58.3 us, 58.7 us] │ 33.6G │  0.51 % │ [0.427, 0.429] │ 59.7 us │     300 ms │ 0.428 │
+│ float N=64 stream: Stockham 8·2·4                               │ PASS │ 40  │ 73.6 us │ 74.3 us │  304 ns │ 74.2 us │ [74.1 us, 74.4 us] │ 26.5G │  0.28 % │ [0.543, 0.545] │ 75.0 us │     380 ms │ 0.544 │
+│ float N=64 stream: Stockham 8·4·2                               │ PASS │ 40  │ 74.8 us │ 76.0 us │  541 ns │ 76.1 us │ [75.8 us, 76.3 us] │ 25.8G │  0.43 % │ [0.555, 0.558] │ 77.2 us │     389 ms │ 0.556 │
+│ float N=64 stream: Split                                        │ PASS │ 40  │ 61.9 us │ 62.0 us │  126 ns │ 62.0 us │ [62.0 us, 62.1 us] │ 31.7G │  0.11 % │ [0.454, 0.455] │ 62.5 us │     318 ms │ 0.454 │
+│ float N=64 stream: FFT                                          │ PASS │ 40  │ 62.2 us │ 63.2 us │  686 ns │ 63.0 us │ [62.9 us, 63.2 us] │ 31.2G │  0.65 % │ [0.460, 0.463] │ 65.5 us │     323 ms │ 0.462 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ float N=128 hot: SimdFFT                                        │ PASS │ 40  │  263 ns │  266 ns │ 1.25 ns │  266 ns │   [266 ns, 267 ns] │ 16.8G │  0.32 % │ [1.000, 1.000] │  269 ns │     349 ms │ 1.000 │
+│ float N=128 hot: Stockham 8·16 default                          │ PASS │ 40  │  102 ns │  104 ns │  644 ps │  104 ns │   [103 ns, 104 ns] │ 43.3G │  0.48 % │ [0.388, 0.391] │  105 ns │     272 ms │ 0.389 │
+│ float N=128 hot: Stockham 8·2·8                                 │ PASS │ 40  │  110 ns │  111 ns │  626 ps │  111 ns │   [111 ns, 111 ns] │ 40.3G │  0.43 % │ [0.416, 0.418] │  112 ns │     291 ms │ 0.417 │
+│ float N=128 hot: Stockham 8·4·4                                 │ PASS │ 40  │  115 ns │  116 ns │  906 ps │  116 ns │   [115 ns, 116 ns] │ 38.7G │  0.63 % │ [0.434, 0.437] │  118 ns │     304 ms │ 0.435 │
+│ float N=128 hot: Stockham 8·8·2                                 │ PASS │ 40  │  117 ns │  118 ns │  713 ps │  118 ns │   [118 ns, 119 ns] │ 37.9G │  0.41 % │ [0.443, 0.445] │  120 ns │     310 ms │ 0.444 │
+│ float N=128 hot: Split                                          │ PASS │ 40  │  150 ns │  151 ns │ 1.13 ns │  151 ns │   [151 ns, 151 ns] │ 29.7G │  0.32 % │ [0.566, 0.570] │  154 ns │     397 ms │ 0.568 │
+│ float N=128 hot: FFT                                            │ PASS │ 40  │  109 ns │  111 ns │ 1.18 ns │  111 ns │   [110 ns, 111 ns] │ 40.5G │  0.81 % │ [0.414, 0.417] │  115 ns │     290 ms │ 0.415 │
+│ float N=128 stream: SimdFFT                                     │ PASS │ 40  │  140 us │  141 us │  300 ns │  141 us │   [141 us, 141 us] │ 16.3G │  0.16 % │ [1.000, 1.000] │  142 us │     360 ms │ 1.000 │
+│ float N=128 stream: Stockham 8·16 default                       │ PASS │ 40  │ 55.4 us │ 55.7 us │  178 ns │ 55.7 us │ [55.6 us, 55.8 us] │ 41.2G │  0.25 % │ [0.395, 0.396] │ 56.2 us │     285 ms │ 0.396 │
+│ float N=128 stream: Stockham 8·2·8                              │ PASS │ 40  │ 61.6 us │ 61.9 us │  162 ns │ 61.9 us │ [61.8 us, 61.9 us] │ 37.1G │  0.18 % │ [0.439, 0.440] │ 62.3 us │     317 ms │ 0.440 │
+│ float N=128 stream: Stockham 8·4·4                              │ PASS │ 40  │ 64.6 us │ 64.9 us │  156 ns │ 64.9 us │ [64.8 us, 65.0 us] │ 35.3G │  0.16 % │ [0.460, 0.462] │ 65.4 us │     332 ms │ 0.461 │
+│ float N=128 stream: Stockham 8·8·2                              │ PASS │ 40  │ 66.3 us │ 66.5 us │  138 ns │ 66.5 us │ [66.4 us, 66.5 us] │ 34.5G │  0.12 % │ [0.472, 0.473] │ 67.0 us │     341 ms │ 0.473 │
+│ float N=128 stream: Split                                       │ PASS │ 40  │ 82.3 us │ 82.6 us │  185 ns │ 82.6 us │ [82.5 us, 82.7 us] │ 27.8G │  0.15 % │ [0.586, 0.587] │ 83.1 us │     211 ms │ 0.587 │
+│ float N=128 stream: FFT                                         │ PASS │ 40  │ 58.1 us │ 58.7 us │  360 ns │ 58.8 us │ [58.4 us, 58.9 us] │ 39.0G │  0.53 % │ [0.415, 0.418] │ 59.3 us │     300 ms │ 0.418 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ float N=256 hot: SimdFFT                                        │ PASS │ 40  │  510 ns │  514 ns │ 1.65 ns │  515 ns │   [514 ns, 515 ns] │ 19.9G │  0.25 % │ [1.000, 1.000] │  518 ns │     337 ms │ 1.000 │
+│ float N=256 hot: Stockham 8·16·2 default                        │ PASS │ 40  │  213 ns │  215 ns │ 1.41 ns │  215 ns │   [214 ns, 215 ns] │ 47.7G │  0.56 % │ [0.416, 0.419] │  218 ns │     281 ms │ 0.417 │
+│ float N=256 hot: Stockham 8·2·16                                │ PASS │ 40  │  212 ns │  214 ns │ 1.69 ns │  214 ns │   [214 ns, 215 ns] │ 47.8G │  0.36 % │ [0.416, 0.418] │  220 ns │     281 ms │ 0.416 │
+│ float N=256 hot: Stockham 8·2·8·2                               │ PASS │ 40  │  256 ns │  259 ns │ 1.58 ns │  259 ns │   [259 ns, 259 ns] │ 39.5G │  0.32 % │ [0.502, 0.504] │  262 ns │     340 ms │ 0.503 │
+│ float N=256 hot: Stockham 8·4·4·2                               │ PASS │ 40  │  229 ns │  232 ns │ 1.02 ns │  232 ns │   [231 ns, 232 ns] │ 44.2G │  0.30 % │ [0.449, 0.451] │  234 ns │     304 ms │ 0.451 │
+│ float N=256 hot: Stockham 8·8·2·2                               │ PASS │ 40  │  238 ns │  240 ns │ 1.07 ns │  240 ns │   [240 ns, 240 ns] │ 42.7G │  0.25 % │ [0.466, 0.467] │  242 ns │     315 ms │ 0.466 │
+│ float N=256 hot: Split                                          │ PASS │ 40  │  371 ns │  375 ns │ 2.22 ns │  375 ns │   [374 ns, 376 ns] │ 27.3G │  0.26 % │ [0.727, 0.731] │  383 ns │     246 ms │ 0.729 │
+│ float N=256 hot: FFT                                            │ PASS │ 40  │  217 ns │  219 ns │ 1.15 ns │  219 ns │   [219 ns, 220 ns] │ 46.7G │  0.26 % │ [0.426, 0.428] │  223 ns │     288 ms │ 0.427 │
+│ float N=256 stream: SimdFFT                                     │ PASS │ 40  │  137 us │  137 us │  228 ns │  137 us │   [137 us, 137 us] │ 19.1G │  0.14 % │ [1.000, 1.000] │  138 us │     351 ms │ 1.000 │
+│ float N=256 stream: Stockham 8·16·2 default                     │ PASS │ 40  │ 61.6 us │ 62.0 us │  154 ns │ 62.0 us │ [61.9 us, 62.0 us] │ 42.3G │  0.20 % │ [0.451, 0.452] │ 62.3 us │     317 ms │ 0.451 │
+│ float N=256 stream: Stockham 8·2·16                             │ PASS │ 40  │ 59.9 us │ 60.2 us │  159 ns │ 60.2 us │ [60.1 us, 60.2 us] │ 43.6G │  0.18 % │ [0.438, 0.439] │ 60.5 us │     308 ms │ 0.438 │
+│ float N=256 stream: Stockham 8·2·8·2                            │ PASS │ 40  │ 68.2 us │ 68.7 us │  225 ns │ 68.7 us │ [68.6 us, 68.8 us] │ 38.2G │  0.17 % │ [0.500, 0.501] │ 69.2 us │     352 ms │ 0.500 │
+│ float N=256 stream: Stockham 8·4·4·2                            │ PASS │ 40  │ 69.0 us │ 69.3 us │  191 ns │ 69.2 us │ [69.2 us, 69.4 us] │ 37.9G │  0.18 % │ [0.504, 0.506] │ 69.7 us │     355 ms │ 0.505 │
+│ float N=256 stream: Stockham 8·8·2·2                            │ PASS │ 40  │ 68.3 us │ 68.7 us │  230 ns │ 68.7 us │ [68.5 us, 68.8 us] │ 38.2G │  0.29 % │ [0.500, 0.502] │ 69.1 us │     352 ms │ 0.500 │
+│ float N=256 stream: Split                                       │ PASS │ 40  │ 98.4 us │ 98.9 us │  306 ns │ 98.8 us │ [98.7 us, 99.0 us] │ 26.5G │  0.19 % │ [0.720, 0.721] │ 99.9 us │     253 ms │ 0.720 │
+│ float N=256 stream: FFT                                         │ PASS │ 40  │ 62.3 us │ 62.7 us │  226 ns │ 62.7 us │ [62.5 us, 62.8 us] │ 41.8G │  0.28 % │ [0.456, 0.458] │ 63.3 us │     321 ms │ 0.457 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ float N=512 hot: SimdFFT                                        │ PASS │ 40  │ 1.11 us │ 1.12 us │ 2.88 ns │ 1.12 us │ [1.12 us, 1.12 us] │ 20.6G │  0.19 % │ [1.000, 1.000] │ 1.13 us │     366 ms │ 1.000 │
+│ float N=512 hot: Stockham 8·16·4 default                        │ PASS │ 40  │  411 ns │  413 ns │ 1.48 ns │  413 ns │   [413 ns, 414 ns] │ 55.7G │  0.18 % │ [0.369, 0.370] │  418 ns │     271 ms │ 0.370 │
+│ float N=512 hot: Stockham 8·4·16                                │ PASS │ 40  │  413 ns │  416 ns │ 1.71 ns │  417 ns │   [416 ns, 417 ns] │ 55.3G │  0.26 % │ [0.372, 0.373] │  419 ns │     273 ms │ 0.373 │
+│ float N=512 hot: Stockham 8·16·2·2                              │ PASS │ 40  │  464 ns │  467 ns │ 1.35 ns │  466 ns │   [466 ns, 467 ns] │ 49.4G │  0.23 % │ [0.417, 0.418] │  470 ns │     306 ms │ 0.417 │
+│ float N=512 hot: Stockham 8·2·8·4                               │ PASS │ 40  │  455 ns │  458 ns │ 1.54 ns │  457 ns │   [457 ns, 459 ns] │ 50.4G │  0.23 % │ [0.409, 0.410] │  461 ns │     300 ms │ 0.409 │
+│ float N=512 hot: Stockham 8·4·4·4                               │ PASS │ 40  │  450 ns │  452 ns │ 1.14 ns │  452 ns │   [452 ns, 453 ns] │ 51.0G │  0.18 % │ [0.404, 0.405] │  454 ns │     296 ms │ 0.404 │
+│ float N=512 hot: Stockham 8·8·2·4                               │ PASS │ 40  │  604 ns │  606 ns │ 1.53 ns │  606 ns │   [605 ns, 607 ns] │ 38.0G │  0.17 % │ [0.541, 0.543] │  610 ns │     397 ms │ 0.542 │
+│ float N=512 hot: Split                                          │ PASS │ 40  │  821 ns │  828 ns │ 2.54 ns │  828 ns │   [827 ns, 829 ns] │ 27.8G │  0.20 % │ [0.739, 0.742] │  833 ns │     271 ms │ 0.740 │
+│ float N=512 hot: FFT                                            │ PASS │ 40  │  443 ns │  448 ns │ 1.65 ns │  448 ns │   [447 ns, 448 ns] │ 51.4G │  0.21 % │ [0.400, 0.401] │  452 ns │     294 ms │ 0.401 │
+│ float N=512 stream: SimdFFT                                     │ PASS │ 40  │  152 us │  153 us │  209 ns │  153 us │   [153 us, 153 us] │ 19.3G │  0.05 % │ [1.000, 1.000] │  153 us │     391 ms │ 1.000 │
+│ float N=512 stream: Stockham 8·16·4 default                     │ PASS │ 40  │ 59.1 us │ 59.4 us │  400 ns │ 59.3 us │ [59.2 us, 59.5 us] │ 49.7G │  0.25 % │ [0.388, 0.390] │ 61.0 us │     304 ms │ 0.389 │
+│ float N=512 stream: Stockham 8·4·16                             │ PASS │ 40  │ 59.3 us │ 59.6 us │  341 ns │ 59.4 us │ [59.4 us, 59.5 us] │ 49.6G │  0.12 % │ [0.389, 0.390] │ 60.7 us │     305 ms │ 0.390 │
+│ float N=512 stream: Stockham 8·16·2·2                           │ PASS │ 40  │ 66.3 us │ 66.7 us │  365 ns │ 66.6 us │ [66.4 us, 66.7 us] │ 44.3G │  0.26 % │ [0.435, 0.437] │ 67.9 us │     341 ms │ 0.436 │
+│ float N=512 stream: Stockham 8·2·8·4                            │ PASS │ 40  │ 65.3 us │ 65.7 us │  358 ns │ 65.8 us │ [65.5 us, 65.8 us] │ 44.9G │  0.38 % │ [0.429, 0.431] │ 67.0 us │     336 ms │ 0.430 │
+│ float N=512 stream: Stockham 8·4·4·4                            │ PASS │ 40  │ 64.2 us │ 64.5 us │  295 ns │ 64.4 us │ [64.4 us, 64.5 us] │ 45.8G │  0.19 % │ [0.422, 0.423] │ 65.5 us │     330 ms │ 0.422 │
+│ float N=512 stream: Stockham 8·8·2·4                            │ PASS │ 40  │ 64.7 us │ 65.2 us │  353 ns │ 65.2 us │ [64.9 us, 65.3 us] │ 45.3G │  0.40 % │ [0.426, 0.428] │ 66.4 us │     334 ms │ 0.427 │
+│ float N=512 stream: Split                                       │ PASS │ 40  │  110 us │  110 us │  391 ns │  110 us │   [110 us, 110 us] │ 26.8G │  0.12 % │ [0.721, 0.722] │  111 us │     282 ms │ 0.721 │
+│ float N=512 stream: FFT                                         │ PASS │ 40  │ 60.4 us │ 60.8 us │  409 ns │ 60.7 us │ [60.5 us, 60.8 us] │ 48.6G │  0.34 % │ [0.397, 0.398] │ 62.0 us │     311 ms │ 0.397 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ float N=1024 hot: SimdFFT                                       │ PASS │ 40  │ 2.33 us │ 2.34 us │ 3.31 ns │ 2.34 us │ [2.33 us, 2.34 us] │ 21.9G │  0.10 % │ [1.000, 1.000] │ 2.35 us │     383 ms │ 1.000 │
+│ float N=1024 hot: Stockham 8·16·8 default                       │ PASS │ 40  │  886 ns │  889 ns │ 2.14 ns │  889 ns │   [888 ns, 890 ns] │ 57.6G │  0.20 % │ [0.380, 0.381] │  896 ns │     291 ms │ 0.380 │
+│ float N=1024 hot: Stockham 8·8·16                               │ PASS │ 40  │  914 ns │  918 ns │ 2.24 ns │  918 ns │   [916 ns, 920 ns] │ 55.8G │  0.21 % │ [0.392, 0.394] │  922 ns │     301 ms │ 0.393 │
+│ float N=1024 hot: Stockham 8·16·2·4                             │ PASS │ 40  │  970 ns │  974 ns │ 2.34 ns │  974 ns │   [972 ns, 975 ns] │ 52.5G │  0.21 % │ [0.417, 0.418] │  978 ns │     319 ms │ 0.417 │
+│ float N=1024 hot: Stockham 8·16·4·2                             │ PASS │ 40  │ 1.07 us │ 1.07 us │ 1.37 ns │ 1.07 us │ [1.07 us, 1.07 us] │ 47.9G │  0.10 % │ [0.457, 0.457] │ 1.07 us │     350 ms │ 0.457 │
+│ float N=1024 hot: Stockham 8·2·8·8                              │ PASS │ 40  │ 1.01 us │ 1.01 us │ 2.00 ns │ 1.01 us │ [1.01 us, 1.01 us] │ 50.5G │  0.13 % │ [0.433, 0.434] │ 1.02 us │     332 ms │ 0.434 │
+│ float N=1024 hot: Stockham 8·4·4·8                              │ PASS │ 40  │ 1.06 us │ 1.06 us │ 1.51 ns │ 1.06 us │ [1.06 us, 1.06 us] │ 48.1G │  0.09 % │ [0.455, 0.456] │ 1.07 us │     349 ms │ 0.456 │
+│ float N=1024 hot: Stockham 8·8·2·8                              │ PASS │ 40  │  997 ns │ 1.00 us │ 2.73 ns │ 1.00 us │  [998 ns, 1.00 us] │ 51.1G │  0.21 % │ [0.427, 0.429] │ 1.01 us │     328 ms │ 0.429 │
+│ float N=1024 hot: Split                                         │ PASS │ 40  │ 1.73 us │ 1.74 us │ 2.34 ns │ 1.74 us │ [1.74 us, 1.74 us] │ 29.4G │  0.06 % │ [0.744, 0.746] │ 1.75 us │     285 ms │ 0.745 │
+│ float N=1024 hot: FFT                                           │ PASS │ 40  │  890 ns │  894 ns │ 1.51 ns │  894 ns │   [893 ns, 894 ns] │ 57.3G │  0.10 % │ [0.382, 0.383] │  899 ns │     293 ms │ 0.383 │
+│ float N=1024 stream: SimdFFT                                    │ PASS │ 40  │  156 us │  159 us │  614 ns │  159 us │   [159 us, 159 us] │ 20.6G │  0.12 % │ [1.000, 1.000] │  159 us │     203 ms │ 1.000 │
+│ float N=1024 stream: Stockham 8·16·8 default                    │ PASS │ 40  │ 63.4 us │ 63.7 us │  304 ns │ 63.6 us │ [63.6 us, 63.6 us] │ 51.5G │  0.12 % │ [0.400, 0.402] │ 64.7 us │     326 ms │ 0.401 │
+│ float N=1024 stream: Stockham 8·8·16                            │ PASS │ 40  │ 64.3 us │ 64.7 us │  319 ns │ 64.7 us │ [64.6 us, 64.8 us] │ 50.6G │  0.26 % │ [0.407, 0.408] │ 65.8 us │     331 ms │ 0.408 │
+│ float N=1024 stream: Stockham 8·16·2·4                          │ PASS │ 40  │ 65.5 us │ 66.0 us │  288 ns │ 66.0 us │ [65.9 us, 66.1 us] │ 49.7G │  0.22 % │ [0.415, 0.417] │ 67.0 us │     338 ms │ 0.416 │
+│ float N=1024 stream: Stockham 8·16·4·2                          │ PASS │ 40  │ 67.8 us │ 68.1 us │  273 ns │ 68.0 us │ [68.0 us, 68.1 us] │ 48.2G │  0.13 % │ [0.428, 0.429] │ 69.0 us │     349 ms │ 0.429 │
+│ float N=1024 stream: Stockham 8·2·8·8                           │ PASS │ 40  │ 67.3 us │ 67.6 us │  268 ns │ 67.6 us │ [67.5 us, 67.6 us] │ 48.5G │  0.17 % │ [0.425, 0.427] │ 68.6 us │     346 ms │ 0.426 │
+│ float N=1024 stream: Stockham 8·4·4·8                           │ PASS │ 40  │ 66.1 us │ 66.3 us │  249 ns │ 66.2 us │ [66.2 us, 66.3 us] │ 49.5G │  0.12 % │ [0.417, 0.418] │ 67.2 us │     340 ms │ 0.418 │
+│ float N=1024 stream: Stockham 8·8·2·8                           │ PASS │ 40  │ 65.5 us │ 65.9 us │  284 ns │ 65.9 us │ [65.7 us, 66.0 us] │ 49.7G │  0.30 % │ [0.415, 0.416] │ 66.6 us │     337 ms │ 0.415 │
+│ float N=1024 stream: Split                                      │ PASS │ 40  │  116 us │  117 us │  446 ns │  117 us │   [117 us, 117 us] │ 27.9G │  0.20 % │ [0.739, 0.741] │  119 us │     300 ms │ 0.740 │
+│ float N=1024 stream: FFT                                        │ PASS │ 40  │ 63.0 us │ 63.3 us │  303 ns │ 63.2 us │ [63.1 us, 63.2 us] │ 51.9G │  0.10 % │ [0.398, 0.399] │ 64.2 us │     324 ms │ 0.398 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ float N=2048 hot: SimdFFT                                       │ PASS │ 40  │ 5.38 us │ 5.40 us │ 19.9 ns │ 5.40 us │ [5.40 us, 5.40 us] │ 20.9G │  0.12 % │ [1.000, 1.000] │ 5.51 us │     221 ms │ 1.000 │
+│ float N=2048 hot: Stockham 8·16·16 default                      │ PASS │ 40  │ 1.97 us │ 1.98 us │ 17.0 ns │ 1.97 us │ [1.97 us, 1.97 us] │ 57.1G │  0.07 % │ [0.365, 0.365] │ 2.04 us │     324 ms │ 0.365 │
+│ float N=2048 hot: Stockham 8·16·2·8                             │ PASS │ 40  │ 2.06 us │ 2.07 us │ 9.33 ns │ 2.06 us │ [2.06 us, 2.06 us] │ 54.6G │  0.06 % │ [0.382, 0.382] │ 2.10 us │     338 ms │ 0.382 │
+│ float N=2048 hot: Stockham 8·16·4·4                             │ PASS │ 40  │ 2.20 us │ 2.21 us │ 4.03 ns │ 2.21 us │ [2.21 us, 2.21 us] │ 51.0G │  0.08 % │ [0.409, 0.409] │ 2.23 us │     362 ms │ 0.409 │
+│ float N=2048 hot: Stockham 8·16·8·2                             │ PASS │ 40  │ 2.25 us │ 2.26 us │ 6.90 ns │ 2.27 us │ [2.26 us, 2.27 us] │ 49.7G │  0.20 % │ [0.419, 0.420] │ 2.29 us │     371 ms │ 0.419 │
+│ float N=2048 hot: Stockham 8·2·8·16                             │ PASS │ 40  │ 2.26 us │ 2.27 us │ 3.38 ns │ 2.27 us │ [2.27 us, 2.27 us] │ 49.6G │  0.09 % │ [0.420, 0.421] │ 2.28 us │     372 ms │ 0.421 │
+│ float N=2048 hot: Stockham 8·4·4·16                             │ PASS │ 40  │ 2.21 us │ 2.22 us │ 15.0 ns │ 2.22 us │ [2.21 us, 2.22 us] │ 50.8G │  0.11 % │ [0.410, 0.411] │ 2.26 us │     364 ms │ 0.410 │
+│ float N=2048 hot: Stockham 8·8·2·16                             │ PASS │ 40  │ 2.23 us │ 2.23 us │ 6.79 ns │ 2.24 us │ [2.23 us, 2.24 us] │ 50.4G │  0.17 % │ [0.413, 0.414] │ 2.26 us │     366 ms │ 0.414 │
+│ float N=2048 hot: Split                                         │ PASS │ 40  │ 3.60 us │ 3.60 us │ 5.00 ns │ 3.60 us │ [3.60 us, 3.61 us] │ 31.3G │  0.07 % │ [0.667, 0.668] │ 3.62 us │     295 ms │ 0.667 │
+│ float N=2048 hot: FFT                                           │ PASS │ 40  │ 2.01 us │ 2.02 us │ 14.3 ns │ 2.01 us │ [2.01 us, 2.02 us] │ 55.9G │  0.08 % │ [0.373, 0.373] │ 2.08 us │     331 ms │ 0.373 │
+│ float N=2048 stream: SimdFFT                                    │ PASS │ 40  │  176 us │  177 us │  437 ns │  177 us │   [177 us, 177 us] │ 20.4G │  0.11 % │ [1.000, 1.000] │  179 us │     226 ms │ 1.000 │
+│ float N=2048 stream: Stockham 8·16·16 default                   │ PASS │ 40  │ 66.6 us │ 67.0 us │  348 ns │ 66.8 us │ [66.8 us, 66.9 us] │ 53.9G │  0.14 % │ [0.378, 0.379] │ 68.0 us │     343 ms │ 0.378 │
+│ float N=2048 stream: Stockham 8·16·2·8                          │ PASS │ 40  │ 69.5 us │ 69.7 us │  361 ns │ 69.6 us │ [69.6 us, 69.7 us] │ 51.8G │  0.11 % │ [0.394, 0.394] │ 71.0 us │     357 ms │ 0.394 │
+│ float N=2048 stream: Stockham 8·16·4·4                          │ PASS │ 40  │ 73.4 us │ 73.7 us │  325 ns │ 73.6 us │ [73.6 us, 73.7 us] │ 48.9G │  0.17 % │ [0.417, 0.417] │ 75.1 us │     377 ms │ 0.417 │
+│ float N=2048 stream: Stockham 8·16·8·2                          │ PASS │ 40  │ 74.8 us │ 75.1 us │  319 ns │ 75.2 us │ [75.0 us, 75.2 us] │ 48.0G │  0.12 % │ [0.424, 0.426] │ 76.4 us │     385 ms │ 0.425 │
+│ float N=2048 stream: Stockham 8·2·8·16                          │ PASS │ 40  │ 75.2 us │ 75.6 us │  367 ns │ 75.6 us │ [75.4 us, 75.7 us] │ 47.7G │  0.30 % │ [0.427, 0.428] │ 76.8 us │     387 ms │ 0.428 │
+│ float N=2048 stream: Stockham 8·4·4·16                          │ PASS │ 40  │ 74.1 us │ 74.4 us │  325 ns │ 74.4 us │ [74.3 us, 74.4 us] │ 48.5G │  0.13 % │ [0.421, 0.421] │ 75.6 us │     381 ms │ 0.421 │
+│ float N=2048 stream: Stockham 8·8·2·16                          │ PASS │ 40  │ 71.9 us │ 72.2 us │  317 ns │ 72.2 us │ [72.1 us, 72.3 us] │ 49.9G │  0.15 % │ [0.408, 0.409] │ 73.4 us │     370 ms │ 0.409 │
+│ float N=2048 stream: Split                                      │ PASS │ 40  │  115 us │  115 us │  417 ns │  115 us │   [115 us, 115 us] │ 31.3G │  0.16 % │ [0.652, 0.653] │  117 us │     295 ms │ 0.653 │
+│ float N=2048 stream: FFT                                        │ PASS │ 40  │ 67.1 us │ 67.5 us │  422 ns │ 67.3 us │ [67.2 us, 67.5 us] │ 53.5G │  0.17 % │ [0.381, 0.382] │ 68.9 us │     345 ms │ 0.381 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ float N=4096 hot: SimdFFT                                       │ PASS │ 40  │ 11.3 us │ 11.3 us │ 28.6 ns │ 11.3 us │ [11.3 us, 11.3 us] │ 21.7G │  0.09 % │ [1.000, 1.000] │ 11.4 us │     232 ms │ 1.000 │
+│ float N=4096 hot: Stockham 8·16·16·2 default                    │ PASS │ 40  │ 5.11 us │ 5.12 us │ 7.82 ns │ 5.12 us │ [5.12 us, 5.13 us] │ 48.0G │  0.11 % │ [0.452, 0.453] │ 5.15 us │     210 ms │ 0.453 │
+│ float N=4096 hot: Stockham 8·2·16·16                            │ PASS │ 40  │ 5.13 us │ 5.14 us │ 6.28 ns │ 5.14 us │ [5.14 us, 5.14 us] │ 47.8G │  0.06 % │ [0.454, 0.454] │ 5.16 us │     210 ms │ 0.454 │
+│ float N=4096 hot: Stockham 8·16·2·8·2                           │ PASS │ 40  │ 5.76 us │ 5.79 us │ 14.9 ns │ 5.79 us │ [5.78 us, 5.80 us] │ 42.4G │  0.22 % │ [0.511, 0.513] │ 5.83 us │     237 ms │ 0.512 │
+│ float N=4096 hot: Stockham 8·16·2·16                            │ PASS │ 40  │ 4.99 us │ 5.01 us │ 8.24 ns │ 5.01 us │ [5.01 us, 5.01 us] │ 49.0G │  0.10 % │ [0.442, 0.443] │ 5.03 us │     205 ms │ 0.443 │
+│ float N=4096 hot: Stockham 8·16·4·4·2                           │ PASS │ 40  │ 5.95 us │ 5.97 us │ 15.5 ns │ 5.96 us │ [5.96 us, 5.97 us] │ 41.2G │  0.10 % │ [0.527, 0.528] │ 6.02 us │     244 ms │ 0.527 │
+│ float N=4096 hot: Stockham 8·16·8·2·2                           │ PASS │ 40  │ 5.91 us │ 5.93 us │ 17.2 ns │ 5.93 us │ [5.91 us, 5.94 us] │ 41.5G │  0.20 % │ [0.523, 0.525] │ 5.97 us │     243 ms │ 0.524 │
+│ float N=4096 hot: Stockham 8·2·8·16·2                           │ PASS │ 40  │ 5.85 us │ 5.87 us │ 11.1 ns │ 5.87 us │ [5.86 us, 5.88 us] │ 41.8G │  0.17 % │ [0.519, 0.519] │ 5.90 us │     241 ms │ 0.519 │
+│ float N=4096 hot: Split                                         │ PASS │ 40  │ 9.30 us │ 9.32 us │ 13.9 ns │ 9.32 us │ [9.31 us, 9.33 us] │ 26.4G │  0.11 % │ [0.824, 0.825] │ 9.36 us │     382 ms │ 0.824 │
+│ float N=4096 hot: FFT                                           │ PASS │ 40  │ 5.07 us │ 5.09 us │ 7.73 ns │ 5.09 us │ [5.08 us, 5.09 us] │ 48.3G │  0.13 % │ [0.449, 0.450] │ 5.10 us │     208 ms │ 0.450 │
+│ float N=4096 stream: SimdFFT                                    │ PASS │ 40  │  184 us │  185 us │  408 ns │  185 us │   [185 us, 185 us] │ 21.3G │  0.09 % │ [1.000, 1.000] │  186 us │     237 ms │ 1.000 │
+│ float N=4096 stream: Stockham 8·16·16·2 default                 │ PASS │ 40  │ 83.5 us │ 83.8 us │  267 ns │ 83.7 us │ [83.7 us, 83.8 us] │ 47.0G │  0.16 % │ [0.452, 0.453] │ 84.8 us │     215 ms │ 0.453 │
+│ float N=4096 stream: Stockham 8·2·16·16                         │ PASS │ 40  │ 84.3 us │ 84.6 us │  301 ns │ 84.6 us │ [84.5 us, 84.6 us] │ 46.5G │  0.13 % │ [0.457, 0.458] │ 85.8 us │     217 ms │ 0.457 │
+│ float N=4096 stream: Stockham 8·16·2·8·2                        │ PASS │ 40  │ 95.3 us │ 95.8 us │  389 ns │ 95.6 us │ [95.6 us, 95.8 us] │ 41.1G │  0.17 % │ [0.517, 0.518] │ 96.7 us │     245 ms │ 0.517 │
+│ float N=4096 stream: Stockham 8·16·2·16                         │ PASS │ 40  │ 82.3 us │ 82.6 us │  241 ns │ 82.6 us │ [82.5 us, 82.7 us] │ 47.6G │  0.13 % │ [0.446, 0.447] │ 83.5 us │     212 ms │ 0.446 │
+│ float N=4096 stream: Stockham 8·16·4·4·2                        │ PASS │ 40  │  101 us │  101 us │  321 ns │  101 us │   [101 us, 101 us] │ 38.9G │  0.12 % │ [0.546, 0.547] │  103 us │     259 ms │ 0.546 │
+│ float N=4096 stream: Stockham 8·16·8·2·2                        │ PASS │ 40  │ 97.2 us │ 97.7 us │  308 ns │ 97.7 us │ [97.5 us, 97.8 us] │ 40.3G │  0.23 % │ [0.526, 0.529] │ 98.3 us │     250 ms │ 0.528 │
+│ float N=4096 stream: Stockham 8·2·8·16·2                        │ PASS │ 40  │ 96.8 us │ 97.1 us │  231 ns │ 97.1 us │ [97.0 us, 97.1 us] │ 40.5G │  0.10 % │ [0.524, 0.525] │ 98.1 us │     249 ms │ 0.525 │
+│ float N=4096 stream: Split                                      │ PASS │ 40  │  151 us │  152 us │  214 ns │  152 us │   [152 us, 152 us] │ 25.9G │  0.08 % │ [0.819, 0.820] │  152 us │     388 ms │ 0.819 │
+│ float N=4096 stream: FFT                                        │ PASS │ 40  │ 82.8 us │ 83.0 us │  250 ns │ 82.9 us │ [82.9 us, 83.0 us] │ 47.4G │  0.11 % │ [0.448, 0.449] │ 83.9 us │     212 ms │ 0.448 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ float N=8192 hot: SimdFFT                                       │ PASS │ 40  │ 25.1 us │ 25.2 us │ 44.2 ns │ 25.2 us │ [25.2 us, 25.2 us] │ 21.1G │  0.09 % │ [1.000, 1.000] │ 25.4 us │     258 ms │ 1.000 │
+│ float N=8192 hot: Stockham 8·16·16·4 default                    │ PASS │ 40  │ 11.6 us │ 11.6 us │ 13.8 ns │ 11.6 us │ [11.6 us, 11.6 us] │ 45.9G │  0.07 % │ [0.461, 0.461] │ 11.6 us │     238 ms │ 0.461 │
+│ float N=8192 hot: Stockham 8·4·16·16                            │ PASS │ 40  │ 13.3 us │ 13.3 us │ 19.2 ns │ 13.3 us │ [13.3 us, 13.3 us] │ 39.9G │  0.07 % │ [0.529, 0.530] │ 13.4 us │     273 ms │ 0.530 │
+│ float N=8192 hot: Stockham 8·16·16·2·2                          │ PASS │ 40  │ 13.2 us │ 13.2 us │ 32.8 ns │ 13.2 us │ [13.2 us, 13.2 us] │ 40.2G │  0.08 % │ [0.525, 0.526] │ 13.4 us │     271 ms │ 0.526 │
+│ float N=8192 hot: Stockham 8·16·4·16                            │ PASS │ 40  │ 12.8 us │ 12.8 us │ 24.8 ns │ 12.8 us │ [12.8 us, 12.8 us] │ 41.6G │  0.07 % │ [0.507, 0.508] │ 12.9 us │     262 ms │ 0.508 │
+│ float N=8192 hot: Stockham 8·16·2·8·4                           │ PASS │ 40  │ 12.6 us │ 12.6 us │ 47.7 ns │ 12.6 us │ [12.6 us, 12.6 us] │ 42.3G │  0.16 % │ [0.500, 0.501] │ 12.8 us │     258 ms │ 0.501 │
+│ float N=8192 hot: Stockham 8·16·4·4·4                           │ PASS │ 40  │ 12.1 us │ 12.1 us │ 11.8 ns │ 12.1 us │ [12.1 us, 12.1 us] │ 43.9G │  0.08 % │ [0.481, 0.482] │ 12.2 us │     248 ms │ 0.481 │
+│ float N=8192 hot: Stockham 8·16·8·2·4                           │ PASS │ 40  │ 12.6 us │ 12.7 us │ 30.9 ns │ 12.7 us │ [12.7 us, 12.7 us] │ 42.0G │  0.25 % │ [0.503, 0.504] │ 12.7 us │     260 ms │ 0.503 │
+│ float N=8192 hot: Split                                         │ PASS │ 40  │ 22.8 us │ 22.8 us │ 25.3 ns │ 22.8 us │ [22.8 us, 22.8 us] │ 23.3G │  0.07 % │ [0.905, 0.906] │ 22.9 us │     234 ms │ 0.906 │
+│ float N=8192 hot: FFT                                           │ PASS │ 40  │ 11.5 us │ 11.5 us │ 34.0 ns │ 11.5 us │ [11.5 us, 11.5 us] │ 46.3G │  0.07 % │ [0.456, 0.456] │ 11.7 us │     235 ms │ 0.456 │
+│ float N=8192 stream: SimdFFT                                    │ PASS │ 40  │  206 us │  207 us │  404 ns │  207 us │   [207 us, 207 us] │ 20.6G │  0.09 % │ [1.000, 1.000] │  208 us │     265 ms │ 1.000 │
+│ float N=8192 stream: Stockham 8·16·16·4 default                 │ PASS │ 40  │ 95.0 us │ 95.3 us │  395 ns │ 95.2 us │ [95.2 us, 95.3 us] │ 44.7G │  0.11 % │ [0.460, 0.461] │ 96.9 us │     244 ms │ 0.460 │
+│ float N=8192 stream: Stockham 8·4·16·16                         │ PASS │ 40  │  111 us │  112 us │  431 ns │  112 us │   [112 us, 112 us] │ 38.1G │  0.17 % │ [0.540, 0.541] │  114 us │     287 ms │ 0.541 │
+│ float N=8192 stream: Stockham 8·16·16·2·2                       │ PASS │ 40  │  109 us │  110 us │  416 ns │  110 us │   [110 us, 110 us] │ 38.8G │  0.12 % │ [0.529, 0.531] │  111 us │     281 ms │ 0.530 │
+│ float N=8192 stream: Stockham 8·16·4·16                         │ PASS │ 40  │  105 us │  105 us │  533 ns │  105 us │   [105 us, 105 us] │ 40.6G │  0.10 % │ [0.506, 0.507] │  108 us │     269 ms │ 0.507 │
+│ float N=8192 stream: Stockham 8·16·2·8·4                        │ PASS │ 40  │  104 us │  104 us │  314 ns │  104 us │   [104 us, 104 us] │ 40.8G │  0.19 % │ [0.504, 0.505] │  105 us │     267 ms │ 0.504 │
+│ float N=8192 stream: Stockham 8·16·4·4·4                        │ PASS │ 40  │  101 us │  101 us │  355 ns │  101 us │   [101 us, 101 us] │ 42.1G │  0.14 % │ [0.488, 0.489] │  102 us │     259 ms │ 0.488 │
+│ float N=8192 stream: Stockham 8·16·8·2·4                        │ PASS │ 40  │  105 us │  105 us │  354 ns │  105 us │   [105 us, 105 us] │ 40.5G │  0.21 % │ [0.508, 0.510] │  106 us │     270 ms │ 0.509 │
+│ float N=8192 stream: Split                                      │ PASS │ 40  │  182 us │  182 us │  540 ns │  182 us │   [182 us, 182 us] │ 23.4G │  0.14 % │ [0.879, 0.881] │  184 us │     233 ms │ 0.880 │
+│ float N=8192 stream: FFT                                        │ PASS │ 40  │ 93.9 us │ 94.2 us │  319 ns │ 94.2 us │ [94.1 us, 94.2 us] │ 45.2G │  0.15 % │ [0.455, 0.456] │ 95.5 us │     241 ms │ 0.455 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ float N=16384 hot: SimdFFT                                      │ PASS │ 40  │ 50.6 us │ 50.8 us │  309 ns │ 50.7 us │ [50.7 us, 50.7 us] │ 22.6G │  0.09 % │ [1.000, 1.000] │ 52.0 us │     260 ms │ 1.000 │
+│ float N=16384 hot: Stockham 8·16·16·8 default                   │ PASS │ 40  │ 24.3 us │ 24.4 us │  273 ns │ 24.3 us │ [24.3 us, 24.4 us] │ 47.1G │  0.13 % │ [0.480, 0.481] │ 25.4 us │     250 ms │ 0.481 │
+│ float N=16384 hot: Stockham 8·8·16·16                           │ PASS │ 40  │ 27.3 us │ 27.5 us │ 75.9 ns │ 27.5 us │ [27.4 us, 27.5 us] │ 41.8G │  0.20 % │ [0.540, 0.542] │ 27.7 us │     281 ms │ 0.541 │
+│ float N=16384 hot: Stockham 8·16·16·2·4                         │ PASS │ 40  │ 26.7 us │ 26.9 us │ 59.8 ns │ 26.9 us │ [26.8 us, 26.9 us] │ 42.7G │  0.13 % │ [0.529, 0.530] │ 27.0 us │     275 ms │ 0.530 │
+│ float N=16384 hot: Stockham 8·16·8·16                           │ PASS │ 40  │ 26.6 us │ 26.8 us │  150 ns │ 26.7 us │ [26.7 us, 26.8 us] │ 42.9G │  0.20 % │ [0.526, 0.528] │ 27.5 us │     274 ms │ 0.527 │
+│ float N=16384 hot: Stockham 8·16·16·4·2                         │ PASS │ 40  │ 32.4 us │ 32.6 us │ 84.1 ns │ 32.5 us │ [32.5 us, 32.6 us] │ 35.2G │  0.10 % │ [0.641, 0.642] │ 32.9 us │     333 ms │ 0.642 │
+│ float N=16384 hot: Stockham 8·16·2·8·8                          │ PASS │ 40  │ 31.1 us │ 31.4 us │  274 ns │ 31.3 us │ [31.3 us, 31.3 us] │ 36.7G │  0.13 % │ [0.617, 0.618] │ 32.2 us │     321 ms │ 0.618 │
+│ float N=16384 hot: Stockham 8·16·4·4·8                          │ PASS │ 40  │ 24.8 us │ 25.0 us │  259 ns │ 24.9 us │ [24.8 us, 24.9 us] │ 46.1G │  0.12 % │ [0.490, 0.491] │ 25.6 us │     256 ms │ 0.491 │
+│ float N=16384 hot: Split                                        │ PASS │ 40  │ 46.8 us │ 46.9 us │  131 ns │ 46.9 us │ [46.9 us, 47.0 us] │ 24.4G │  0.13 % │ [0.925, 0.927] │ 47.4 us │     240 ms │ 0.926 │
+│ float N=16384 hot: FFT                                          │ PASS │ 40  │ 24.0 us │ 24.3 us │  399 ns │ 24.1 us │ [24.1 us, 24.1 us] │ 47.6G │  0.11 % │ [0.476, 0.476] │ 25.5 us │     248 ms │ 0.476 │
+│ float N=16384 stream: SimdFFT                                   │ PASS │ 40  │  207 us │  207 us │  577 ns │  207 us │   [207 us, 208 us] │ 22.1G │  0.16 % │ [1.000, 1.000] │  210 us │     266 ms │ 1.000 │
+│ float N=16384 stream: Stockham 8·16·16·8 default                │ PASS │ 40  │ 99.7 us │  100 us │  732 ns │  100 us │  [99.9 us, 100 us] │ 45.9G │  0.12 % │ [0.482, 0.483] │  103 us │     257 ms │ 0.482 │
+│ float N=16384 stream: Stockham 8·8·16·16                        │ PASS │ 40  │  112 us │  113 us │  423 ns │  113 us │   [113 us, 113 us] │ 40.7G │  0.12 % │ [0.543, 0.544] │  114 us │     289 ms │ 0.544 │
+│ float N=16384 stream: Stockham 8·16·16·2·4                      │ PASS │ 40  │  112 us │  112 us │  193 ns │  112 us │   [112 us, 112 us] │ 41.0G │  0.11 % │ [0.539, 0.540] │  112 us │     287 ms │ 0.540 │
+│ float N=16384 stream: Stockham 8·16·8·16                        │ PASS │ 40  │  110 us │  110 us │  345 ns │  110 us │   [110 us, 110 us] │ 41.6G │  0.19 % │ [0.531, 0.533] │  112 us │     283 ms │ 0.532 │
+│ float N=16384 stream: Stockham 8·16·16·4·2                      │ PASS │ 40  │  132 us │  132 us │  458 ns │  132 us │   [132 us, 132 us] │ 34.7G │  0.10 % │ [0.636, 0.638] │  134 us │     338 ms │ 0.637 │
+│ float N=16384 stream: Stockham 8·16·2·8·8                       │ PASS │ 40  │  132 us │  133 us │  432 ns │  133 us │   [133 us, 133 us] │ 34.5G │  0.09 % │ [0.640, 0.642] │  135 us │     340 ms │ 0.641 │
+│ float N=16384 stream: Stockham 8·16·4·4·8                       │ PASS │ 40  │  103 us │  104 us │  365 ns │  104 us │   [104 us, 104 us] │ 44.3G │  0.11 % │ [0.499, 0.500] │  105 us │     265 ms │ 0.500 │
+│ float N=16384 stream: Split                                     │ PASS │ 40  │  187 us │  188 us │  385 ns │  188 us │   [188 us, 188 us] │ 24.4G │  0.11 % │ [0.906, 0.908] │  189 us │     241 ms │ 0.907 │
+│ float N=16384 stream: FFT                                       │ PASS │ 40  │ 99.1 us │ 99.5 us │  647 ns │ 99.4 us │ [99.3 us, 99.4 us] │ 46.2G │  0.11 % │ [0.479, 0.480] │  103 us │     255 ms │ 0.479 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ float N=32768 hot: SimdFFT                                      │ PASS │ 40  │  114 us │  115 us │  339 ns │  114 us │   [114 us, 115 us] │ 21.5G │  0.11 % │ [1.000, 1.000] │  116 us │     293 ms │ 1.000 │
+│ float N=32768 hot: Stockham 8·16·16·16 default                  │ PASS │ 40  │ 58.9 us │ 59.1 us │  275 ns │ 59.1 us │ [59.0 us, 59.1 us] │ 41.6G │  0.17 % │ [0.515, 0.517] │ 60.5 us │     303 ms │ 0.516 │
+│ float N=32768 hot: Stockham 8·16·16·2·8                         │ PASS │ 40  │ 62.4 us │ 62.6 us │  183 ns │ 62.6 us │ [62.5 us, 62.6 us] │ 39.3G │  0.12 % │ [0.546, 0.547] │ 63.3 us │     320 ms │ 0.546 │
+│ float N=32768 hot: Stockham 8·16·16·4·4                         │ PASS │ 40  │ 58.1 us │ 58.4 us │  355 ns │ 58.3 us │ [58.2 us, 58.3 us] │ 42.2G │  0.18 % │ [0.509, 0.509] │ 59.7 us │     299 ms │ 0.509 │
+│ float N=32768 hot: Stockham 8·16·16·8·2                         │ PASS │ 40  │ 58.0 us │ 58.3 us │  395 ns │ 58.2 us │ [58.2 us, 58.2 us] │ 42.2G │  0.11 % │ [0.508, 0.509] │ 60.3 us │     299 ms │ 0.508 │
+│ float N=32768 hot: Stockham 8·16·2·8·16                         │ PASS │ 40  │ 64.1 us │ 64.5 us │  267 ns │ 64.4 us │ [64.3 us, 64.5 us] │ 38.1G │  0.20 % │ [0.562, 0.564] │ 65.6 us │     330 ms │ 0.563 │
+│ float N=32768 hot: Stockham 8·16·4·4·16                         │ PASS │ 40  │ 62.1 us │ 62.5 us │  508 ns │ 62.3 us │ [62.3 us, 62.4 us] │ 39.4G │  0.16 % │ [0.544, 0.545] │ 64.2 us │     320 ms │ 0.544 │
+│ float N=32768 hot: Stockham 8·16·8·2·16                         │ PASS │ 40  │ 64.0 us │ 64.4 us │  242 ns │ 64.4 us │ [64.3 us, 64.4 us] │ 38.2G │  0.22 % │ [0.561, 0.563] │ 65.5 us │     330 ms │ 0.562 │
+│ float N=32768 hot: Split                                        │ PASS │ 40  │ 93.7 us │ 94.2 us │  290 ns │ 94.2 us │ [94.1 us, 94.2 us] │ 26.1G │  0.12 % │ [0.822, 0.823] │ 95.3 us │     241 ms │ 0.822 │
+│ float N=32768 hot: FFT                                          │ PASS │ 40  │ 66.8 us │ 67.2 us │  461 ns │ 67.1 us │ [67.0 us, 67.2 us] │ 36.6G │  0.16 % │ [0.585, 0.587] │ 68.9 us │     344 ms │ 0.586 │
+│ float N=32768 stream: SimdFFT                                   │ PASS │ 40  │  232 us │  232 us │ 1.09 us │  232 us │   [232 us, 232 us] │ 21.2G │  0.10 % │ [1.000, 1.000] │  238 us │     297 ms │ 1.000 │
+│ float N=32768 stream: Stockham 8·16·16·16 default               │ PASS │ 40  │  120 us │  121 us │  400 ns │  121 us │   [121 us, 121 us] │ 40.7G │  0.15 % │ [0.520, 0.521] │  123 us │     310 ms │ 0.521 │
+│ float N=32768 stream: Stockham 8·16·16·2·8                      │ PASS │ 40  │  132 us │  132 us │  220 ns │  132 us │   [132 us, 132 us] │ 37.2G │  0.11 % │ [0.569, 0.570] │  133 us │     338 ms │ 0.569 │
+│ float N=32768 stream: Stockham 8·16·16·4·4                      │ PASS │ 40  │  119 us │  120 us │  858 ns │  119 us │   [119 us, 119 us] │ 41.2G │  0.12 % │ [0.513, 0.514] │  122 us │     306 ms │ 0.514 │
+│ float N=32768 stream: Stockham 8·16·16·8·2                      │ PASS │ 40  │  118 us │  119 us │  712 ns │  119 us │   [119 us, 119 us] │ 41.3G │  0.15 % │ [0.511, 0.513] │  122 us │     305 ms │ 0.512 │
+│ float N=32768 stream: Stockham 8·16·2·8·16                      │ PASS │ 40  │  133 us │  133 us │  290 ns │  133 us │   [133 us, 133 us] │ 37.0G │  0.15 % │ [0.572, 0.573] │  134 us │     341 ms │ 0.573 │
+│ float N=32768 stream: Stockham 8·16·4·4·16                      │ PASS │ 40  │  128 us │  130 us │ 1.19 us │  129 us │   [129 us, 129 us] │ 38.1G │  0.16 % │ [0.556, 0.558] │  133 us │     332 ms │ 0.557 │
+│ float N=32768 stream: Stockham 8·16·8·2·16                      │ PASS │ 40  │  133 us │  134 us │  724 ns │  133 us │   [133 us, 134 us] │ 36.8G │  0.20 % │ [0.574, 0.576] │  136 us │     342 ms │ 0.575 │
+│ float N=32768 stream: Split                                     │ PASS │ 40  │  187 us │  188 us │  760 ns │  188 us │   [188 us, 188 us] │ 26.1G │  0.12 % │ [0.810, 0.811] │  190 us │     241 ms │ 0.811 │
+│ float N=32768 stream: FFT                                       │ PASS │ 40  │  135 us │  136 us │ 1.23 us │  135 us │   [135 us, 136 us] │ 36.3G │  0.20 % │ [0.583, 0.584] │  141 us │     348 ms │ 0.584 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ float N=65536 hot: SimdFFT                                      │ PASS │ 40  │  245 us │  246 us │ 1.01 us │  246 us │   [246 us, 246 us] │ 21.3G │  0.14 % │ [1.000, 1.000] │  250 us │     315 ms │ 1.000 │
+│ float N=65536 hot: Stockham 8·16·16·16·2 default                │ PASS │ 40  │  138 us │  139 us │  894 ns │  138 us │   [138 us, 138 us] │ 37.9G │  0.10 % │ [0.562, 0.563] │  142 us │     355 ms │ 0.562 │
+│ float N=65536 hot: Stockham 8·2·16·16·16                        │ PASS │ 40  │  138 us │  139 us │  518 ns │  139 us │   [138 us, 139 us] │ 37.8G │  0.17 % │ [0.562, 0.564] │  140 us │     355 ms │ 0.563 │
+│ float N=65536 hot: Stockham 8·16·16·2·8·2                       │ PASS │ 40  │  196 us │  198 us │  649 ns │  198 us │   [197 us, 198 us] │ 26.5G │  0.17 % │ [0.801, 0.804] │  199 us │     253 ms │ 0.803 │
+│ float N=65536 hot: Stockham 8·16·2·16·16                        │ PASS │ 40  │  140 us │  141 us │ 1.44 us │  140 us │   [140 us, 141 us] │ 37.3G │  0.16 % │ [0.570, 0.572] │  146 us │     361 ms │ 0.571 │
+│ float N=65536 hot: Stockham 8·16·16·4·4·2                       │ PASS │ 40  │  140 us │  141 us │  483 ns │  141 us │   [141 us, 141 us] │ 37.2G │  0.12 % │ [0.572, 0.573] │  143 us │     361 ms │ 0.572 │
+│ float N=65536 hot: Stockham 8·16·16·2·16                        │ PASS │ 40  │  138 us │  139 us │  781 ns │  138 us │   [138 us, 138 us] │ 37.9G │  0.12 % │ [0.561, 0.563] │  141 us │     355 ms │ 0.562 │
+│ float N=65536 hot: Stockham 8·16·16·8·2·2                       │ PASS │ 40  │  141 us │  142 us │ 1.04 us │  142 us │   [142 us, 142 us] │ 37.0G │  0.11 % │ [0.576, 0.577] │  146 us │     364 ms │ 0.576 │
+│ float N=65536 hot: Split                                        │ PASS │ 40  │  233 us │  235 us │ 1.20 us │  234 us │   [234 us, 235 us] │ 22.4G │  0.19 % │ [0.951, 0.954] │  239 us │     300 ms │ 0.952 │
+│ float N=65536 hot: FFT                                          │ PASS │ 40  │  139 us │  140 us │  973 ns │  140 us │   [140 us, 140 us] │ 37.5G │  0.10 % │ [0.567, 0.569] │  144 us │     358 ms │ 0.568 │
+│ float N=65536 stream: SimdFFT                                   │ PASS │ 40  │  246 us │  247 us │ 1.03 us │  247 us │   [246 us, 247 us] │ 21.2G │  0.30 % │ [1.000, 1.000] │  250 us │     316 ms │ 1.000 │
+│ float N=65536 stream: Stockham 8·16·16·16·2 default             │ PASS │ 40  │  138 us │  140 us │  892 ns │  139 us │   [139 us, 140 us] │ 37.6G │  0.36 % │ [0.563, 0.566] │  142 us │     357 ms │ 0.564 │
+│ float N=65536 stream: Stockham 8·2·16·16·16                     │ PASS │ 40  │  138 us │  139 us │  881 ns │  139 us │   [139 us, 139 us] │ 37.7G │  0.50 % │ [0.561, 0.565] │  141 us │     356 ms │ 0.562 │
+│ float N=65536 stream: Stockham 8·16·16·2·8·2                    │ PASS │ 40  │  195 us │  197 us │ 1.55 us │  197 us │   [196 us, 197 us] │ 26.7G │  0.41 % │ [0.793, 0.797] │  202 us │     252 ms │ 0.796 │
+│ float N=65536 stream: Stockham 8·16·2·16·16                     │ PASS │ 40  │  140 us │  141 us │ 1.67 us │  141 us │   [140 us, 141 us] │ 37.3G │  0.16 % │ [0.569, 0.571] │  146 us │     362 ms │ 0.570 │
+│ float N=65536 stream: Stockham 8·16·16·4·4·2                    │ PASS │ 40  │  141 us │  142 us │  599 ns │  141 us │   [141 us, 142 us] │ 37.1G │  0.21 % │ [0.571, 0.574] │  144 us │     362 ms │ 0.573 │
+│ float N=65536 stream: Stockham 8·16·16·2·16                     │ PASS │ 40  │  137 us │  138 us │  830 ns │  138 us │   [138 us, 138 us] │ 38.0G │  0.27 % │ [0.559, 0.560] │  142 us │     354 ms │ 0.559 │
+│ float N=65536 stream: Stockham 8·16·16·8·2·2                    │ PASS │ 40  │  141 us │  143 us │ 1.20 us │  142 us │   [142 us, 142 us] │ 36.9G │  0.19 % │ [0.575, 0.577] │  146 us │     365 ms │ 0.576 │
+│ float N=65536 stream: Split                                     │ PASS │ 40  │  232 us │  235 us │ 1.20 us │  234 us │   [234 us, 235 us] │ 22.4G │  0.14 % │ [0.948, 0.952] │  239 us │     300 ms │ 0.950 │
+│ float N=65536 stream: FFT                                       │ PASS │ 40  │  139 us │  140 us │ 1.08 us │  140 us │   [139 us, 140 us] │ 37.5G │  0.34 % │ [0.565, 0.567] │  144 us │     359 ms │ 0.566 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ float N=131072 hot: SimdFFT                                     │ PASS │ 40  │  559 us │  568 us │ 11.6 us │  561 us │   [560 us, 575 us] │ 19.9G │  0.22 % │ [1.000, 1.000] │  586 us │     364 ms │ 1.000 │
+│ float N=131072 hot: Stockham 8·16·16·16·4 default               │ PASS │ 40  │  292 us │  297 us │ 4.59 us │  295 us │   [295 us, 296 us] │ 37.8G │  0.27 % │ [0.523, 0.526] │  306 us │     381 ms │ 0.525 │
+│ float N=131072 hot: Stockham 8·4·16·16·16                       │ PASS │ 40  │  305 us │  309 us │ 3.69 us │  308 us │   [307 us, 308 us] │ 36.2G │  0.37 % │ [0.541, 0.548] │  317 us │     396 ms │ 0.547 │
+│ float N=131072 hot: Stockham 8·16·16·16·2·2                     │ PASS │ 40  │  327 us │  334 us │ 5.45 us │  331 us │   [331 us, 332 us] │ 33.7G │  0.33 % │ [0.587, 0.590] │  344 us │     214 ms │ 0.589 │
+│ float N=131072 hot: Stockham 8·16·4·16·16                       │ PASS │ 40  │  303 us │  308 us │ 4.75 us │  305 us │   [304 us, 313 us] │ 36.5G │  0.35 % │ [0.541, 0.544] │  316 us │     394 ms │ 0.542 │
+│ float N=131072 hot: Stockham 8·16·16·2·8·4                      │ PASS │ 40  │  297 us │  302 us │ 4.77 us │  299 us │   [299 us, 300 us] │ 37.2G │  0.29 % │ [0.530, 0.534] │  311 us │     386 ms │ 0.533 │
+│ float N=131072 hot: Stockham 8·16·16·4·16                       │ PASS │ 40  │  290 us │  296 us │ 3.70 us │  294 us │   [293 us, 299 us] │ 37.9G │  0.33 % │ [0.517, 0.524] │  303 us │     379 ms │ 0.523 │
+│ float N=131072 hot: Stockham 8·16·16·4·4·4                      │ PASS │ 40  │  299 us │  303 us │ 3.80 us │  302 us │   [301 us, 302 us] │ 36.9G │  0.28 % │ [0.534, 0.538] │  312 us │     388 ms │ 0.537 │
+│ float N=131072 hot: Split                                       │ PASS │ 40  │  513 us │  521 us │ 3.51 us │  520 us │   [520 us, 521 us] │ 21.4G │  0.22 % │ [0.917, 0.928] │  529 us │     333 ms │ 0.925 │
+│ float N=131072 hot: FFT                                         │ PASS │ 40  │  292 us │  298 us │ 3.67 us │  296 us │   [296 us, 298 us] │ 37.6G │  0.37 % │ [0.521, 0.528] │  305 us │     382 ms │ 0.527 │
+│ float N=131072 stream: SimdFFT                                  │ PASS │ 40  │  559 us │  567 us │ 11.2 us │  560 us │   [560 us, 562 us] │ 19.9G │  0.22 % │ [1.000, 1.000] │  590 us │     363 ms │ 1.000 │
+│ float N=131072 stream: Stockham 8·16·16·16·4 default            │ PASS │ 40  │  292 us │  297 us │ 4.06 us │  295 us │   [294 us, 295 us] │ 37.8G │  0.20 % │ [0.524, 0.527] │  305 us │     380 ms │ 0.526 │
+│ float N=131072 stream: Stockham 8·4·16·16·16                    │ PASS │ 40  │  307 us │  312 us │ 3.72 us │  310 us │   [310 us, 311 us] │ 35.9G │  0.37 % │ [0.549, 0.554] │  319 us │     200 ms │ 0.552 │
+│ float N=131072 stream: Stockham 8·16·16·16·2·2                  │ PASS │ 40  │  327 us │  334 us │ 6.35 us │  331 us │   [331 us, 332 us] │ 33.6G │  0.36 % │ [0.587, 0.591] │  360 us │     214 ms │ 0.589 │
+│ float N=131072 stream: Stockham 8·16·4·16·16                    │ PASS │ 40  │  303 us │  308 us │ 4.93 us │  305 us │   [304 us, 312 us] │ 36.6G │  0.27 % │ [0.541, 0.544] │  319 us │     394 ms │ 0.543 │
+│ float N=131072 stream: Stockham 8·16·16·2·8·4                   │ PASS │ 40  │  297 us │  302 us │ 4.64 us │  299 us │   [299 us, 300 us] │ 37.2G │  0.21 % │ [0.532, 0.534] │  311 us │     386 ms │ 0.533 │
+│ float N=131072 stream: Stockham 8·16·16·4·16                    │ PASS │ 40  │  290 us │  295 us │ 3.56 us │  294 us │   [293 us, 294 us] │ 38.0G │  0.23 % │ [0.520, 0.524] │  302 us │     378 ms │ 0.523 │
+│ float N=131072 stream: Stockham 8·16·16·4·4·4                   │ PASS │ 40  │  299 us │  303 us │ 3.57 us │  302 us │   [301 us, 302 us] │ 36.9G │  0.22 % │ [0.537, 0.538] │  311 us │     388 ms │ 0.538 │
+│ float N=131072 stream: Split                                    │ PASS │ 40  │  513 us │  521 us │ 4.49 us │  520 us │   [519 us, 520 us] │ 21.4G │  0.21 % │ [0.917, 0.927] │  532 us │     333 ms │ 0.926 │
+│ float N=131072 stream: FFT                                      │ PASS │ 40  │  294 us │  298 us │ 3.65 us │  296 us │   [296 us, 297 us] │ 37.6G │  0.26 % │ [0.526, 0.529] │  307 us │     381 ms │ 0.528 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ float N=262144 hot: SimdFFT                                     │ PASS │ 40  │ 1.14 ms │ 1.15 ms │ 9.04 us │ 1.14 ms │ [1.14 ms, 1.15 ms] │ 20.6G │  0.35 % │ [1.000, 1.000] │ 1.17 ms │     367 ms │ 1.000 │
+│ float N=262144 hot: Stockham 8·16·16·16·8 default               │ PASS │ 40  │  658 us │  686 us │ 10.0 us │  686 us │   [684 us, 689 us] │ 34.4G │  0.60 % │ [0.597, 0.602] │  706 us │     220 ms │ 0.600 │
+│ float N=262144 hot: Stockham 8·8·16·16·16                       │ PASS │ 40  │  622 us │  632 us │ 6.72 us │  629 us │   [628 us, 632 us] │ 37.5G │  0.40 % │ [0.549, 0.553] │  649 us │     405 ms │ 0.551 │
+│ float N=262144 hot: Stockham 8·16·16·16·2·4                     │ PASS │ 40  │  670 us │  686 us │ 7.75 us │  685 us │   [683 us, 685 us] │ 34.5G │  0.44 % │ [0.596, 0.599] │  708 us │     220 ms │ 0.598 │
+│ float N=262144 hot: Stockham 8·16·8·16·16                       │ PASS │ 40  │  633 us │  640 us │ 5.88 us │  638 us │   [636 us, 639 us] │ 37.0G │  0.36 % │ [0.557, 0.558] │  653 us │     409 ms │ 0.557 │
+│ float N=262144 hot: Stockham 8·16·16·16·4·2                     │ PASS │ 40  │  675 us │  686 us │ 7.88 us │  685 us │   [683 us, 687 us] │ 34.5G │  0.54 % │ [0.595, 0.600] │  704 us │     220 ms │ 0.598 │
+│ float N=262144 hot: Stockham 8·16·16·8·16                       │ PASS │ 40  │  620 us │  633 us │ 6.33 us │  631 us │   [630 us, 633 us] │ 37.4G │  0.38 % │ [0.550, 0.554] │  647 us │     405 ms │ 0.552 │
+│ float N=262144 hot: Stockham 8·16·16·2·8·8                      │ PASS │ 40  │  618 us │  630 us │ 6.06 us │  628 us │   [627 us, 629 us] │ 37.6G │  0.25 % │ [0.548, 0.551] │  643 us │     403 ms │ 0.550 │
+│ float N=262144 hot: Split                                       │ PASS │ 40  │ 1.04 ms │ 1.07 ms │ 8.90 us │ 1.07 ms │ [1.07 ms, 1.08 ms] │ 22.0G │  0.25 % │ [0.933, 0.940] │ 1.09 ms │     343 ms │ 0.938 │
+│ float N=262144 hot: FFT                                         │ PASS │ 40  │  608 us │  617 us │ 5.62 us │  616 us │   [615 us, 617 us] │ 38.3G │  0.31 % │ [0.537, 0.540] │  631 us │     395 ms │ 0.539 │
+│ float N=262144 stream: SimdFFT                                  │ PASS │ 40  │ 1.14 ms │ 1.14 ms │ 3.17 us │ 1.14 ms │ [1.14 ms, 1.14 ms] │ 20.6G │  0.19 % │ [1.000, 1.000] │ 1.15 ms │     366 ms │ 1.000 │
+│ float N=262144 stream: Stockham 8·16·16·16·8 default            │ PASS │ 40  │  659 us │  683 us │ 8.52 us │  686 us │   [683 us, 688 us] │ 34.4G │  0.46 % │ [0.598, 0.601] │  691 us │     219 ms │ 0.600 │
+│ float N=262144 stream: Stockham 8·8·16·16·16                    │ PASS │ 40  │  624 us │  629 us │ 2.28 us │  629 us │   [628 us, 630 us] │ 37.5G │  0.25 % │ [0.549, 0.551] │  633 us │     403 ms │ 0.550 │
+│ float N=262144 stream: Stockham 8·16·16·16·2·4                  │ PASS │ 40  │  674 us │  683 us │ 3.48 us │  683 us │   [682 us, 684 us] │ 34.6G │  0.24 % │ [0.596, 0.598] │  691 us │     219 ms │ 0.597 │
+│ float N=262144 stream: Stockham 8·16·8·16·16                    │ PASS │ 40  │  629 us │  637 us │ 2.44 us │  637 us │   [637 us, 638 us] │ 37.0G │  0.16 % │ [0.556, 0.558] │  641 us │     408 ms │ 0.557 │
+│ float N=262144 stream: Stockham 8·16·16·16·4·2                  │ PASS │ 40  │  673 us │  684 us │ 3.42 us │  684 us │   [683 us, 686 us] │ 34.5G │  0.31 % │ [0.597, 0.599] │  691 us │     219 ms │ 0.598 │
+│ float N=262144 stream: Stockham 8·16·16·8·16                    │ PASS │ 40  │  622 us │  631 us │ 3.04 us │  632 us │   [630 us, 633 us] │ 37.3G │  0.28 % │ [0.551, 0.553] │  637 us │     404 ms │ 0.552 │
+│ float N=262144 stream: Stockham 8·16·16·2·8·8                   │ PASS │ 40  │  618 us │  628 us │ 2.99 us │  628 us │   [627 us, 629 us] │ 37.6G │  0.31 % │ [0.548, 0.551] │  635 us │     402 ms │ 0.549 │
+│ float N=262144 stream: Split                                    │ PASS │ 40  │ 1.05 ms │ 1.07 ms │ 8.07 us │ 1.08 ms │ [1.07 ms, 1.08 ms] │ 21.9G │  0.23 % │ [0.937, 0.942] │ 1.08 ms │     343 ms │ 0.940 │
+│ float N=262144 stream: FFT                                      │ PASS │ 40  │  606 us │  615 us │ 3.08 us │  616 us │   [615 us, 617 us] │ 38.3G │  0.26 % │ [0.537, 0.540] │  621 us │     394 ms │ 0.538 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ float N=524288 hot: SimdFFT                                     │ PASS │ 40  │ 2.39 ms │ 2.40 ms │ 6.03 us │ 2.40 ms │ [2.40 ms, 2.40 ms] │ 20.8G │  0.18 % │ [1.000, 1.000] │ 2.41 ms │     384 ms │ 1.000 │
+│ float N=524288 hot: Stockham 8·16·16·16·16 default              │ PASS │ 40  │ 1.41 ms │ 1.45 ms │ 9.57 us │ 1.45 ms │ [1.45 ms, 1.45 ms] │ 34.4G │  0.28 % │ [0.603, 0.605] │ 1.47 ms │     232 ms │ 0.604 │
+│ float N=524288 hot: Stockham 8·16·16·16·2·8                     │ PASS │ 40  │ 1.48 ms │ 1.49 ms │ 5.18 us │ 1.48 ms │ [1.48 ms, 1.49 ms] │ 33.6G │  0.24 % │ [0.618, 0.620] │ 1.50 ms │     238 ms │ 0.619 │
+│ float N=524288 hot: Stockham 8·16·16·16·4·4                     │ PASS │ 40  │ 1.48 ms │ 1.49 ms │ 8.06 us │ 1.49 ms │ [1.49 ms, 1.49 ms] │ 33.5G │  0.27 % │ [0.619, 0.623] │ 1.52 ms │     238 ms │ 0.621 │
+│ float N=524288 hot: Stockham 8·16·16·16·8·2                     │ PASS │ 40  │ 1.48 ms │ 1.50 ms │ 7.61 us │ 1.50 ms │ [1.49 ms, 1.50 ms] │ 33.3G │  0.32 % │ [0.622, 0.625] │ 1.52 ms │     239 ms │ 0.624 │
+│ float N=524288 hot: Stockham 8·16·16·2·8·16                     │ PASS │ 40  │ 1.46 ms │ 1.48 ms │ 33.6 us │ 1.48 ms │ [1.47 ms, 1.48 ms] │ 33.7G │  0.29 % │ [0.614, 0.616] │ 1.69 ms │     237 ms │ 0.615 │
+│ float N=524288 hot: Stockham 8·16·16·4·4·16                     │ PASS │ 40  │ 1.45 ms │ 1.48 ms │ 10.8 us │ 1.48 ms │ [1.48 ms, 1.49 ms] │ 33.6G │  0.22 % │ [0.618, 0.620] │ 1.51 ms │     237 ms │ 0.619 │
+│ float N=524288 hot: Stockham 8·16·16·8·2·16                     │ PASS │ 40  │ 1.39 ms │ 1.47 ms │ 15.6 us │ 1.47 ms │ [1.47 ms, 1.48 ms] │ 33.8G │  0.31 % │ [0.614, 0.615] │ 1.49 ms │     235 ms │ 0.615 │
+│ float N=524288 hot: Split                                       │ PASS │ 40  │ 2.10 ms │ 2.21 ms │ 22.2 us │ 2.21 ms │ [2.21 ms, 2.22 ms] │ 22.5G │  0.20 % │ [0.922, 0.925] │ 2.24 ms │     354 ms │ 0.924 │
+│ float N=524288 hot: FFT                                         │ PASS │ 40  │ 1.42 ms │ 1.46 ms │ 9.25 us │ 1.46 ms │ [1.46 ms, 1.47 ms] │ 34.0G │  0.23 % │ [0.610, 0.612] │ 1.48 ms │     234 ms │ 0.611 │
+│ float N=524288 stream: SimdFFT                                  │ PASS │ 40  │ 2.39 ms │ 2.40 ms │ 5.84 us │ 2.40 ms │ [2.39 ms, 2.40 ms] │ 20.8G │  0.18 % │ [1.000, 1.000] │ 2.41 ms │     384 ms │ 1.000 │
+│ float N=524288 stream: Stockham 8·16·16·16·16 default           │ PASS │ 40  │ 1.42 ms │ 1.45 ms │ 9.65 us │ 1.45 ms │ [1.45 ms, 1.45 ms] │ 34.4G │  0.22 % │ [0.603, 0.606] │ 1.46 ms │     232 ms │ 0.604 │
+│ float N=524288 stream: Stockham 8·16·16·16·2·8                  │ PASS │ 40  │ 1.47 ms │ 1.49 ms │ 10.2 us │ 1.49 ms │ [1.48 ms, 1.49 ms] │ 33.5G │  0.27 % │ [0.618, 0.620] │ 1.54 ms │     238 ms │ 0.619 │
+│ float N=524288 stream: Stockham 8·16·16·16·4·4                  │ PASS │ 40  │ 1.48 ms │ 1.49 ms │ 5.81 us │ 1.49 ms │ [1.49 ms, 1.49 ms] │ 33.4G │  0.21 % │ [0.621, 0.623] │ 1.51 ms │     239 ms │ 0.622 │
+│ float N=524288 stream: Stockham 8·16·16·16·8·2                  │ PASS │ 40  │ 1.48 ms │ 1.50 ms │ 5.42 us │ 1.50 ms │ [1.49 ms, 1.50 ms] │ 33.3G │  0.19 % │ [0.623, 0.625] │ 1.51 ms │     239 ms │ 0.624 │
+│ float N=524288 stream: Stockham 8·16·16·2·8·16                  │ PASS │ 40  │ 1.46 ms │ 1.48 ms │ 6.13 us │ 1.48 ms │ [1.47 ms, 1.48 ms] │ 33.7G │  0.28 % │ [0.615, 0.617] │ 1.49 ms │     236 ms │ 0.616 │
+│ float N=524288 stream: Stockham 8·16·16·4·4·16                  │ PASS │ 40  │ 1.45 ms │ 1.48 ms │ 8.22 us │ 1.48 ms │ [1.48 ms, 1.49 ms] │ 33.6G │  0.22 % │ [0.618, 0.620] │ 1.50 ms │     237 ms │ 0.619 │
+│ float N=524288 stream: Stockham 8·16·16·8·2·16                  │ PASS │ 40  │ 1.40 ms │ 1.47 ms │ 14.3 us │ 1.47 ms │ [1.47 ms, 1.48 ms] │ 33.8G │  0.27 % │ [0.614, 0.615] │ 1.48 ms │     235 ms │ 0.614 │
+│ float N=524288 stream: Split                                    │ PASS │ 40  │ 2.10 ms │ 2.21 ms │ 23.8 us │ 2.22 ms │ [2.21 ms, 2.22 ms] │ 22.5G │  0.17 % │ [0.922, 0.925] │ 2.23 ms │     354 ms │ 0.923 │
+│ float N=524288 stream: FFT                                      │ PASS │ 40  │ 1.41 ms │ 1.46 ms │ 9.85 us │ 1.47 ms │ [1.46 ms, 1.47 ms] │ 34.0G │  0.30 % │ [0.609, 0.612] │ 1.49 ms │     234 ms │ 0.612 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ float N=1048576 hot: SimdFFT                                    │ PASS │ 40  │ 5.35 ms │ 5.39 ms │ 36.1 us │ 5.39 ms │ [5.37 ms, 5.40 ms] │ 19.5G │  0.39 % │ [1.000, 1.000] │ 5.55 ms │     216 ms │ 1.000 │
+│ float N=1048576 hot: Stockham 8·16·16·16·16·2 default           │ PASS │ 40  │ 3.56 ms │ 3.59 ms │ 23.5 us │ 3.58 ms │ [3.58 ms, 3.59 ms] │ 29.3G │  0.25 % │ [0.664, 0.668] │ 3.68 ms │     287 ms │ 0.666 │
+│ float N=1048576 hot: Stockham 8·2·16·16·16·16                   │ PASS │ 40  │ 3.28 ms │ 3.31 ms │ 20.8 us │ 3.31 ms │ [3.30 ms, 3.32 ms] │ 31.7G │  0.28 % │ [0.613, 0.616] │ 3.41 ms │     265 ms │ 0.614 │
+│ float N=1048576 hot: Stockham 8·16·16·16·2·8·2                  │ PASS │ 40  │ 3.55 ms │ 3.58 ms │ 19.1 us │ 3.58 ms │ [3.57 ms, 3.58 ms] │ 29.3G │  0.20 % │ [0.661, 0.666] │ 3.67 ms │     286 ms │ 0.664 │
+│ float N=1048576 hot: Stockham 8·16·2·16·16·16                   │ PASS │ 40  │ 3.27 ms │ 3.29 ms │ 18.0 us │ 3.29 ms │ [3.28 ms, 3.30 ms] │ 31.9G │  0.20 % │ [0.609, 0.612] │ 3.39 ms │     263 ms │ 0.611 │
+│ float N=1048576 hot: Stockham 8·16·16·16·4·4·2                  │ PASS │ 40  │ 3.35 ms │ 3.37 ms │ 21.6 us │ 3.37 ms │ [3.36 ms, 3.38 ms] │ 31.1G │  0.31 % │ [0.625, 0.627] │ 3.47 ms │     270 ms │ 0.626 │
+│ float N=1048576 hot: Stockham 8·16·16·2·16·16                   │ PASS │ 40  │ 3.28 ms │ 3.31 ms │ 19.8 us │ 3.30 ms │ [3.30 ms, 3.31 ms] │ 31.7G │  0.19 % │ [0.612, 0.615] │ 3.39 ms │     265 ms │ 0.614 │
+│ float N=1048576 hot: Stockham 8·16·16·16·8·2·2                  │ PASS │ 40  │ 3.31 ms │ 3.42 ms │ 27.7 us │ 3.42 ms │ [3.41 ms, 3.42 ms] │ 30.7G │  0.24 % │ [0.632, 0.636] │ 3.54 ms │     274 ms │ 0.634 │
+│ float N=1048576 hot: Split                                      │ PASS │ 40  │ 5.14 ms │ 5.35 ms │ 41.1 us │ 5.35 ms │ [5.34 ms, 5.37 ms] │ 19.6G │  0.32 % │ [0.989, 0.998] │ 5.43 ms │     214 ms │ 0.994 │
+│ float N=1048576 hot: FFT                                        │ PASS │ 40  │ 3.27 ms │ 3.29 ms │ 18.0 us │ 3.29 ms │ [3.28 ms, 3.29 ms] │ 31.9G │  0.21 % │ [0.609, 0.611] │ 3.38 ms │     263 ms │ 0.610 │
+│ float N=1048576 stream: SimdFFT                                 │ PASS │ 40  │ 5.33 ms │ 5.38 ms │ 19.4 us │ 5.38 ms │ [5.37 ms, 5.38 ms] │ 19.5G │  0.27 % │ [1.000, 1.000] │ 5.42 ms │     215 ms │ 1.000 │
+│ float N=1048576 stream: Stockham 8·16·16·16·16·2 default        │ PASS │ 40  │ 3.56 ms │ 3.59 ms │ 22.1 us │ 3.58 ms │ [3.58 ms, 3.59 ms] │ 29.3G │  0.21 % │ [0.665, 0.668] │ 3.70 ms │     287 ms │ 0.667 │
+│ float N=1048576 stream: Stockham 8·2·16·16·16·16                │ PASS │ 40  │ 3.29 ms │ 3.31 ms │ 12.4 us │ 3.31 ms │ [3.30 ms, 3.31 ms] │ 31.7G │  0.31 % │ [0.613, 0.617] │ 3.33 ms │     265 ms │ 0.614 │
+│ float N=1048576 stream: Stockham 8·16·16·16·2·8·2               │ PASS │ 40  │ 3.55 ms │ 3.58 ms │ 13.3 us │ 3.58 ms │ [3.57 ms, 3.59 ms] │ 29.3G │  0.28 % │ [0.665, 0.667] │ 3.60 ms │     286 ms │ 0.666 │
+│ float N=1048576 stream: Stockham 8·16·2·16·16·16                │ PASS │ 40  │ 3.27 ms │ 3.29 ms │ 16.7 us │ 3.29 ms │ [3.28 ms, 3.29 ms] │ 31.9G │  0.25 % │ [0.611, 0.613] │ 3.36 ms │     263 ms │ 0.612 │
+│ float N=1048576 stream: Stockham 8·16·16·16·4·4·2               │ PASS │ 40  │ 3.35 ms │ 3.38 ms │ 39.4 us │ 3.37 ms │ [3.37 ms, 3.38 ms] │ 31.1G │  0.30 % │ [0.626, 0.629] │ 3.55 ms │     271 ms │ 0.627 │
+│ float N=1048576 stream: Stockham 8·16·16·2·16·16                │ PASS │ 40  │ 3.28 ms │ 3.30 ms │ 16.5 us │ 3.30 ms │ [3.30 ms, 3.30 ms] │ 31.8G │  0.15 % │ [0.612, 0.615] │ 3.38 ms │     264 ms │ 0.613 │
+│ float N=1048576 stream: Stockham 8·16·16·16·8·2·2               │ PASS │ 40  │ 3.33 ms │ 3.42 ms │ 18.6 us │ 3.42 ms │ [3.42 ms, 3.43 ms] │ 30.7G │  0.22 % │ [0.635, 0.638] │ 3.46 ms │     274 ms │ 0.637 │
+│ float N=1048576 stream: Split                                   │ PASS │ 40  │ 5.19 ms │ 5.35 ms │ 35.1 us │ 5.35 ms │ [5.34 ms, 5.36 ms] │ 19.6G │  0.22 % │ [0.993, 0.997] │ 5.45 ms │     214 ms │ 0.996 │
+│ float N=1048576 stream: FFT                                     │ PASS │ 40  │ 3.26 ms │ 3.28 ms │ 14.4 us │ 3.28 ms │ [3.28 ms, 3.29 ms] │ 32.0G │  0.18 % │ [0.610, 0.612] │ 3.35 ms │     263 ms │ 0.611 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ float N=1000 hot: FFT                                           │ PASS │ 40  │ 14.4 us │ 14.5 us │ 14.9 ns │ 14.5 us │ [14.5 us, 14.5 us] │ 3.45G │  0.07 % │ [1.000, 1.000] │ 14.5 us │     296 ms │ 1.000 │
+│ float N=1000 stream: FFT                                        │ PASS │ 40  │  943 us │  944 us │  783 ns │  944 us │   [944 us, 945 us] │ 3.43G │  0.07 % │ [1.000, 1.000] │  946 us │     302 ms │ 1.000 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ float N=1009 hot: FFT                                           │ PASS │ 40  │ 14.7 us │ 14.7 us │ 16.1 ns │ 14.7 us │ [14.7 us, 14.7 us] │ 3.42G │  0.07 % │ [1.000, 1.000] │ 14.8 us │     301 ms │ 1.000 │
+│ float N=1009 stream: FFT                                        │ PASS │ 40  │  945 us │  948 us │  986 ns │  948 us │   [947 us, 948 us] │ 3.40G │  0.08 % │ [1.000, 1.000] │  949 us │     303 ms │ 1.000 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ double N=64 hot: SimdFFT                                        │ PASS │ 40  │  143 ns │  144 ns │  532 ps │  144 ns │   [144 ns, 144 ns] │ 13.3G │  0.28 % │ [1.000, 1.000] │  145 ns │     378 ms │ 1.000 │
+│ double N=64 hot: Stockham 8·8 default                           │ PASS │ 40  │ 91.8 ns │ 93.2 ns │  683 ps │ 93.1 ns │ [92.8 ns, 93.4 ns] │ 20.6G │  0.41 % │ [0.645, 0.649] │ 95.2 ns │     244 ms │ 0.646 │
+│ double N=64 hot: Stockham 8·2·4                                 │ PASS │ 40  │  110 ns │  111 ns │  530 ps │  111 ns │   [110 ns, 111 ns] │ 17.4G │  0.24 % │ [0.766, 0.770] │  112 ns │     290 ms │ 0.769 │
+│ double N=64 hot: Stockham 8·4·2                                 │ PASS │ 40  │  106 ns │  108 ns │  647 ps │  108 ns │   [107 ns, 108 ns] │ 17.8G │  0.49 % │ [0.747, 0.750] │  109 ns │     283 ms │ 0.748 │
+│ double N=64 hot: Split                                          │ PASS │ 40  │ 99.7 ns │  102 ns │ 1.11 ns │  102 ns │   [101 ns, 102 ns] │ 18.8G │  0.62 % │ [0.705, 0.710] │  106 ns │     267 ms │ 0.709 │
+│ double N=64 hot: FFT                                            │ PASS │ 40  │ 93.1 ns │ 94.4 ns │  793 ps │ 94.2 ns │ [94.1 ns, 94.5 ns] │ 20.4G │  0.29 % │ [0.653, 0.656] │ 97.8 ns │     248 ms │ 0.654 │
+│ double N=64 stream: SimdFFT                                     │ PASS │ 40  │  154 us │  157 us │ 2.77 us │  156 us │   [155 us, 157 us] │ 12.6G │  0.77 % │ [1.000, 1.000] │  166 us │     201 ms │ 1.000 │
+│ double N=64 stream: Stockham 8·8 default                        │ PASS │ 40  │  102 us │  103 us │  525 ns │  103 us │   [103 us, 103 us] │ 19.1G │  0.26 % │ [0.654, 0.662] │  105 us │     263 ms │ 0.660 │
+│ double N=64 stream: Stockham 8·2·4                              │ PASS │ 40  │  118 us │  118 us │  475 ns │  118 us │   [118 us, 119 us] │ 16.6G │  0.29 % │ [0.752, 0.763] │  120 us │     303 ms │ 0.760 │
+│ double N=64 stream: Stockham 8·4·2                              │ PASS │ 40  │  121 us │  122 us │  394 ns │  122 us │   [121 us, 122 us] │ 16.2G │  0.15 % │ [0.772, 0.783] │  123 us │     311 ms │ 0.778 │
+│ double N=64 stream: Split                                       │ PASS │ 40  │  108 us │  109 us │  307 ns │  109 us │   [108 us, 109 us] │ 18.1G │  0.14 % │ [0.690, 0.700] │  110 us │     278 ms │ 0.697 │
+│ double N=64 stream: FFT                                         │ PASS │ 40  │  105 us │  106 us │  319 ns │  106 us │   [105 us, 106 us] │ 18.6G │  0.18 % │ [0.669, 0.680] │  106 us │     270 ms │ 0.677 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ double N=128 hot: SimdFFT                                       │ PASS │ 40  │  301 ns │  303 ns │ 1.47 ns │  303 ns │   [302 ns, 303 ns] │ 14.8G │  0.39 % │ [1.000, 1.000] │  306 ns │     397 ms │ 1.000 │
+│ double N=128 hot: Stockham 8·16 default                         │ PASS │ 40  │  174 ns │  176 ns │ 1.45 ns │  176 ns │   [176 ns, 177 ns] │ 25.4G │  0.51 % │ [0.580, 0.585] │  180 ns │     231 ms │ 0.582 │
+│ double N=128 hot: Stockham 8·2·8                                │ PASS │ 40  │  194 ns │  196 ns │  780 ps │  196 ns │   [196 ns, 196 ns] │ 22.9G │  0.23 % │ [0.646, 0.649] │  198 ns │     257 ms │ 0.647 │
+│ double N=128 hot: Stockham 8·4·4                                │ PASS │ 40  │  203 ns │  204 ns │ 1.02 ns │  204 ns │   [204 ns, 205 ns] │ 21.9G │  0.36 % │ [0.673, 0.677] │  207 ns │     268 ms │ 0.674 │
+│ double N=128 hot: Stockham 8·8·2                                │ PASS │ 40  │  208 ns │  209 ns │ 1.05 ns │  209 ns │   [209 ns, 210 ns] │ 21.4G │  0.34 % │ [0.689, 0.693] │  212 ns │     275 ms │ 0.691 │
+│ double N=128 hot: Split                                         │ PASS │ 40  │  272 ns │  274 ns │ 1.10 ns │  274 ns │   [274 ns, 275 ns] │ 16.3G │  0.25 % │ [0.904, 0.906] │  277 ns │     359 ms │ 0.905 │
+│ double N=128 hot: FFT                                           │ PASS │ 40  │  182 ns │  185 ns │ 1.35 ns │  185 ns │   [184 ns, 185 ns] │ 24.3G │  0.53 % │ [0.607, 0.611] │  188 ns │     242 ms │ 0.609 │
+│ double N=128 stream: SimdFFT                                    │ PASS │ 40  │  160 us │  161 us │  502 ns │  161 us │   [161 us, 161 us] │ 14.3G │  0.14 % │ [1.000, 1.000] │  163 us │     206 ms │ 1.000 │
+│ double N=128 stream: Stockham 8·16 default                      │ PASS │ 40  │  100 us │  101 us │  423 ns │  101 us │   [101 us, 101 us] │ 22.7G │  0.38 % │ [0.627, 0.631] │  102 us │     259 ms │ 0.628 │
+│ double N=128 stream: Stockham 8·2·8                             │ PASS │ 40  │  113 us │  113 us │  254 ns │  113 us │   [113 us, 113 us] │ 20.3G │  0.17 % │ [0.704, 0.706] │  114 us │     290 ms │ 0.705 │
+│ double N=128 stream: Stockham 8·4·4                             │ PASS │ 40  │  118 us │  118 us │  256 ns │  118 us │   [118 us, 119 us] │ 19.4G │  0.16 % │ [0.736, 0.738] │  119 us │     303 ms │ 0.737 │
+│ double N=128 stream: Stockham 8·8·2                             │ PASS │ 40  │  122 us │  123 us │  273 ns │  123 us │   [122 us, 123 us] │ 18.7G │  0.11 % │ [0.762, 0.764] │  123 us │     314 ms │ 0.763 │
+│ double N=128 stream: Split                                      │ PASS │ 40  │  153 us │  153 us │  326 ns │  153 us │   [153 us, 153 us] │ 15.0G │  0.14 % │ [0.952, 0.955] │  154 us │     392 ms │ 0.953 │
+│ double N=128 stream: FFT                                        │ PASS │ 40  │  106 us │  107 us │  445 ns │  107 us │   [107 us, 107 us] │ 21.5G │  0.20 % │ [0.665, 0.667] │  108 us │     274 ms │ 0.666 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ double N=256 hot: SimdFFT                                       │ PASS │ 40  │  564 ns │  566 ns │ 1.00 ns │  566 ns │   [566 ns, 566 ns] │ 18.1G │  0.10 % │ [1.000, 1.000] │  569 ns │     371 ms │ 1.000 │
+│ double N=256 hot: Stockham 8·16·2 default                       │ PASS │ 40  │  419 ns │  422 ns │ 1.03 ns │  422 ns │   [421 ns, 422 ns] │ 24.3G │  0.13 % │ [0.744, 0.745] │  424 ns │     276 ms │ 0.745 │
+│ double N=256 hot: Stockham 8·2·16                               │ PASS │ 40  │  420 ns │  424 ns │ 1.90 ns │  424 ns │   [422 ns, 424 ns] │ 24.2G │  0.32 % │ [0.746, 0.749] │  428 ns │     278 ms │ 0.748 │
+│ double N=256 hot: Stockham 8·2·8·2                              │ PASS │ 40  │  487 ns │  491 ns │ 1.33 ns │  491 ns │   [490 ns, 492 ns] │ 20.9G │  0.18 % │ [0.866, 0.868] │  493 ns │     322 ms │ 0.867 │
+│ double N=256 hot: Stockham 8·4·4·2                              │ PASS │ 40  │  466 ns │  470 ns │ 1.76 ns │  470 ns │   [469 ns, 471 ns] │ 21.8G │  0.28 % │ [0.829, 0.832] │  475 ns │     308 ms │ 0.830 │
+│ double N=256 hot: Stockham 8·8·2·2                              │ PASS │ 40  │  507 ns │  510 ns │ 1.67 ns │  510 ns │   [510 ns, 511 ns] │ 20.1G │  0.26 % │ [0.899, 0.902] │  513 ns │     334 ms │ 0.901 │
+│ double N=256 hot: Split                                         │ PASS │ 40  │  611 ns │  615 ns │ 2.09 ns │  615 ns │   [614 ns, 616 ns] │ 16.7G │  0.21 % │ [1.084, 1.088] │  622 ns │     202 ms │ 1.086 │
+│ double N=256 hot: FFT                                           │ PASS │ 40  │  394 ns │  397 ns │ 1.81 ns │  398 ns │   [397 ns, 398 ns] │ 25.8G │  0.33 % │ [0.700, 0.703] │  402 ns │     260 ms │ 0.702 │
+│ double N=256 stream: SimdFFT                                    │ PASS │ 40  │  157 us │  157 us │  385 ns │  157 us │   [157 us, 158 us] │ 16.7G │  0.16 % │ [1.000, 1.000] │  158 us │     202 ms │ 1.000 │
+│ double N=256 stream: Stockham 8·16·2 default                    │ PASS │ 40  │  118 us │  118 us │  329 ns │  118 us │   [118 us, 119 us] │ 22.1G │  0.24 % │ [0.750, 0.753] │  119 us │     303 ms │ 0.751 │
+│ double N=256 stream: Stockham 8·2·16                            │ PASS │ 40  │  114 us │  114 us │  225 ns │  114 us │   [114 us, 114 us] │ 23.0G │  0.12 % │ [0.724, 0.726] │  115 us │     292 ms │ 0.725 │
+│ double N=256 stream: Stockham 8·2·8·2                           │ PASS │ 40  │  131 us │  131 us │  281 ns │  131 us │   [131 us, 132 us] │ 20.0G │  0.15 % │ [0.834, 0.836] │  132 us │     336 ms │ 0.835 │
+│ double N=256 stream: Stockham 8·4·4·2                           │ PASS │ 40  │  136 us │  137 us │  334 ns │  137 us │   [137 us, 137 us] │ 19.1G │  0.11 % │ [0.869, 0.871] │  138 us │     351 ms │ 0.870 │
+│ double N=256 stream: Stockham 8·8·2·2                           │ PASS │ 40  │  131 us │  131 us │  264 ns │  131 us │   [131 us, 131 us] │ 20.0G │  0.17 % │ [0.833, 0.835] │  132 us │     336 ms │ 0.834 │
+│ double N=256 stream: Split                                      │ PASS │ 40  │  170 us │  170 us │  265 ns │  170 us │   [170 us, 170 us] │ 15.4G │  0.10 % │ [1.080, 1.082] │  171 us │     218 ms │ 1.081 │
+│ double N=256 stream: FFT                                        │ PASS │ 40  │  116 us │  116 us │  180 ns │  116 us │   [116 us, 116 us] │ 22.6G │  0.11 % │ [0.736, 0.738] │  117 us │     297 ms │ 0.737 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ double N=512 hot: SimdFFT                                       │ PASS │ 40  │ 1.21 us │ 1.22 us │ 1.54 ns │ 1.22 us │ [1.22 us, 1.22 us] │ 19.0G │  0.10 % │ [1.000, 1.000] │ 1.22 us │     398 ms │ 1.000 │
+│ double N=512 hot: Stockham 8·16·4 default                       │ PASS │ 40  │  899 ns │  903 ns │ 2.47 ns │  904 ns │   [901 ns, 905 ns] │ 25.5G │  0.21 % │ [0.741, 0.744] │  907 ns │     296 ms │ 0.744 │
+│ double N=512 hot: Stockham 8·4·16                               │ PASS │ 40  │  896 ns │  898 ns │ 1.02 ns │  898 ns │   [898 ns, 899 ns] │ 25.6G │  0.09 % │ [0.738, 0.739] │  900 ns │     294 ms │ 0.739 │
+│ double N=512 hot: Stockham 8·16·2·2                             │ PASS │ 40  │  988 ns │  993 ns │ 8.94 ns │  993 ns │   [992 ns, 993 ns] │ 23.2G │  0.10 % │ [0.815, 0.817] │ 1.05 us │     325 ms │ 0.816 │
+│ double N=512 hot: Stockham 8·2·8·4                              │ PASS │ 40  │ 1.01 us │ 1.01 us │ 1.56 ns │ 1.01 us │ [1.01 us, 1.01 us] │ 22.8G │  0.08 % │ [0.831, 0.833] │ 1.01 us │     331 ms │ 0.832 │
+│ double N=512 hot: Stockham 8·4·4·4                              │ PASS │ 40  │ 1.16 us │ 1.16 us │ 1.00 ns │ 1.16 us │ [1.16 us, 1.16 us] │ 19.9G │  0.06 % │ [0.952, 0.953] │ 1.16 us │     379 ms │ 0.952 │
+│ double N=512 hot: Stockham 8·8·2·4                              │ PASS │ 40  │  959 ns │  963 ns │ 2.20 ns │  963 ns │   [961 ns, 964 ns] │ 23.9G │  0.14 % │ [0.791, 0.793] │  967 ns │     315 ms │ 0.792 │
+│ double N=512 hot: Split                                         │ PASS │ 40  │ 1.29 us │ 1.29 us │ 1.35 ns │ 1.29 us │ [1.29 us, 1.29 us] │ 17.9G │  0.07 % │ [1.059, 1.061] │ 1.29 us │     211 ms │ 1.060 │
+│ double N=512 hot: FFT                                           │ PASS │ 40  │  879 ns │  882 ns │ 1.55 ns │  881 ns │   [881 ns, 882 ns] │ 26.1G │  0.13 % │ [0.724, 0.726] │  884 ns │     289 ms │ 0.725 │
+│ double N=512 stream: SimdFFT                                    │ PASS │ 40  │  181 us │  181 us │  371 ns │  181 us │   [181 us, 181 us] │ 16.3G │  0.11 % │ [1.000, 1.000] │  183 us │     232 ms │ 1.000 │
+│ double N=512 stream: Stockham 8·16·4 default                    │ PASS │ 40  │  124 us │  125 us │  301 ns │  125 us │   [125 us, 125 us] │ 23.7G │  0.12 % │ [0.687, 0.689] │  125 us │     319 ms │ 0.688 │
+│ double N=512 stream: Stockham 8·4·16                            │ PASS │ 40  │  130 us │  130 us │  181 ns │  130 us │   [130 us, 130 us] │ 22.6G │  0.10 % │ [0.719, 0.721] │  131 us │     334 ms │ 0.720 │
+│ double N=512 stream: Stockham 8·16·2·2                          │ PASS │ 40  │  136 us │  137 us │  386 ns │  137 us │   [137 us, 137 us] │ 21.5G │  0.22 % │ [0.754, 0.756] │  138 us │     350 ms │ 0.755 │
+│ double N=512 stream: Stockham 8·2·8·4                           │ PASS │ 40  │  136 us │  137 us │  326 ns │  137 us │   [137 us, 137 us] │ 21.5G │  0.18 % │ [0.754, 0.757] │  137 us │     351 ms │ 0.756 │
+│ double N=512 stream: Stockham 8·4·4·4                           │ PASS │ 40  │  142 us │  143 us │  278 ns │  143 us │   [142 us, 143 us] │ 20.7G │  0.14 % │ [0.787, 0.788] │  144 us │     365 ms │ 0.787 │
+│ double N=512 stream: Stockham 8·8·2·4                           │ PASS │ 40  │  130 us │  131 us │  308 ns │  131 us │   [131 us, 131 us] │ 22.5G │  0.18 % │ [0.721, 0.724] │  132 us │     335 ms │ 0.723 │
+│ double N=512 stream: Split                                      │ PASS │ 40  │  175 us │  176 us │  377 ns │  176 us │   [176 us, 176 us] │ 16.7G │  0.11 % │ [0.973, 0.974] │  178 us │     226 ms │ 0.973 │
+│ double N=512 stream: FFT                                        │ PASS │ 40  │  124 us │  125 us │  332 ns │  125 us │   [125 us, 125 us] │ 23.6G │  0.17 % │ [0.690, 0.692] │  126 us │     320 ms │ 0.691 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ double N=1024 hot: SimdFFT                                      │ PASS │ 40  │ 3.08 us │ 3.09 us │ 3.93 ns │ 3.09 us │ [3.09 us, 3.09 us] │ 16.6G │  0.09 % │ [1.000, 1.000] │ 3.10 us │     253 ms │ 1.000 │
+│ double N=1024 hot: Stockham 8·16·8 default                      │ PASS │ 40  │ 1.86 us │ 1.86 us │ 1.78 ns │ 1.86 us │ [1.86 us, 1.86 us] │ 27.5G │  0.05 % │ [0.602, 0.602] │ 1.86 us │     305 ms │ 0.602 │
+│ double N=1024 hot: Stockham 8·8·16                              │ PASS │ 40  │ 1.91 us │ 1.92 us │ 3.16 ns │ 1.92 us │ [1.92 us, 1.92 us] │ 26.7G │  0.08 % │ [0.620, 0.621] │ 1.93 us │     314 ms │ 0.621 │
+│ double N=1024 hot: Stockham 8·16·2·4                            │ PASS │ 40  │ 2.26 us │ 2.27 us │ 3.26 ns │ 2.27 us │ [2.26 us, 2.27 us] │ 22.6G │  0.11 % │ [0.733, 0.735] │ 2.27 us │     371 ms │ 0.734 │
+│ double N=1024 hot: Stockham 8·16·4·2                            │ PASS │ 40  │ 2.20 us │ 2.20 us │ 4.45 ns │ 2.20 us │ [2.20 us, 2.20 us] │ 23.2G │  0.09 % │ [0.713, 0.714] │ 2.22 us │     361 ms │ 0.713 │
+│ double N=1024 hot: Stockham 8·2·8·8                             │ PASS │ 40  │ 2.21 us │ 2.21 us │ 1.94 ns │ 2.21 us │ [2.21 us, 2.21 us] │ 23.2G │  0.05 % │ [0.715, 0.716] │ 2.22 us │     362 ms │ 0.716 │
+│ double N=1024 hot: Stockham 8·4·4·8                             │ PASS │ 40  │ 2.24 us │ 2.24 us │ 2.76 ns │ 2.24 us │ [2.24 us, 2.24 us] │ 22.8G │  0.08 % │ [0.726, 0.727] │ 2.25 us │     367 ms │ 0.726 │
+│ double N=1024 hot: Stockham 8·8·2·8                             │ PASS │ 40  │ 2.16 us │ 2.16 us │ 2.61 ns │ 2.16 us │ [2.16 us, 2.16 us] │ 23.7G │  0.07 % │ [0.699, 0.700] │ 2.17 us │     354 ms │ 0.699 │
+│ double N=1024 hot: Split                                        │ PASS │ 40  │ 2.72 us │ 2.73 us │ 2.80 ns │ 2.73 us │ [2.72 us, 2.73 us] │ 18.8G │  0.08 % │ [0.882, 0.883] │ 2.73 us │     223 ms │ 0.882 │
+│ double N=1024 hot: FFT                                          │ PASS │ 40  │ 1.95 us │ 1.95 us │ 1.68 ns │ 1.95 us │ [1.95 us, 1.96 us] │ 26.2G │  0.06 % │ [0.632, 0.633] │ 1.96 us │     320 ms │ 0.633 │
+│ double N=1024 stream: SimdFFT                                   │ PASS │ 40  │  216 us │  217 us │  449 ns │  217 us │   [216 us, 217 us] │ 15.1G │  0.09 % │ [1.000, 1.000] │  219 us │     277 ms │ 1.000 │
+│ double N=1024 stream: Stockham 8·16·8 default                   │ PASS │ 40  │  132 us │  132 us │  427 ns │  132 us │   [132 us, 132 us] │ 24.8G │  0.12 % │ [0.610, 0.611] │  134 us │     338 ms │ 0.610 │
+│ double N=1024 stream: Stockham 8·8·16                           │ PASS │ 40  │  136 us │  137 us │  313 ns │  137 us │   [136 us, 137 us] │ 24.0G │  0.08 % │ [0.630, 0.631] │  138 us │     350 ms │ 0.631 │
+│ double N=1024 stream: Stockham 8·16·2·4                         │ PASS │ 40  │  145 us │  145 us │  365 ns │  145 us │   [145 us, 146 us] │ 22.5G │  0.16 % │ [0.671, 0.672] │  147 us │     372 ms │ 0.672 │
+│ double N=1024 stream: Stockham 8·16·4·2                         │ PASS │ 40  │  148 us │  148 us │  527 ns │  148 us │   [148 us, 148 us] │ 22.1G │  0.13 % │ [0.683, 0.685] │  151 us │     379 ms │ 0.685 │
+│ double N=1024 stream: Stockham 8·2·8·8                          │ PASS │ 40  │  149 us │  149 us │  438 ns │  149 us │   [149 us, 149 us] │ 21.9G │  0.08 % │ [0.690, 0.691] │  152 us │     383 ms │ 0.690 │
+│ double N=1024 stream: Stockham 8·4·4·8                          │ PASS │ 40  │  153 us │  153 us │  307 ns │  153 us │   [153 us, 153 us] │ 21.4G │  0.09 % │ [0.708, 0.709] │  154 us │     393 ms │ 0.709 │
+│ double N=1024 stream: Stockham 8·8·2·8                          │ PASS │ 40  │  139 us │  140 us │  344 ns │  140 us │   [140 us, 140 us] │ 23.5G │  0.10 % │ [0.645, 0.646] │  142 us │     358 ms │ 0.646 │
+│ double N=1024 stream: Split                                     │ PASS │ 40  │  179 us │  180 us │  660 ns │  180 us │   [180 us, 180 us] │ 18.2G │  0.14 % │ [0.829, 0.832] │  182 us │     230 ms │ 0.830 │
+│ double N=1024 stream: FFT                                       │ PASS │ 40  │  136 us │  137 us │  466 ns │  137 us │   [137 us, 137 us] │ 24.0G │  0.09 % │ [0.631, 0.632] │  139 us │     350 ms │ 0.632 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ double N=2048 hot: SimdFFT                                      │ PASS │ 40  │ 7.88 us │ 7.90 us │ 11.0 ns │ 7.89 us │ [7.89 us, 7.90 us] │ 14.3G │  0.09 % │ [1.000, 1.000] │ 7.92 us │     323 ms │ 1.000 │
+│ double N=2048 hot: Stockham 8·16·16 default                     │ PASS │ 40  │ 4.17 us │ 4.18 us │ 7.86 ns │ 4.18 us │ [4.18 us, 4.19 us] │ 26.9G │  0.08 % │ [0.529, 0.530] │ 4.22 us │     343 ms │ 0.530 │
+│ double N=2048 hot: Stockham 8·16·2·8                            │ PASS │ 40  │ 5.10 us │ 5.12 us │ 9.03 ns │ 5.12 us │ [5.11 us, 5.12 us] │ 22.0G │  0.08 % │ [0.648, 0.649] │ 5.15 us │     210 ms │ 0.648 │
+│ double N=2048 hot: Stockham 8·16·4·4                            │ PASS │ 40  │ 5.43 us │ 5.44 us │ 9.29 ns │ 5.44 us │ [5.44 us, 5.45 us] │ 20.7G │  0.12 % │ [0.689, 0.690] │ 5.46 us │     223 ms │ 0.689 │
+│ double N=2048 hot: Stockham 8·16·8·2                            │ PASS │ 40  │ 5.11 us │ 5.12 us │ 9.63 ns │ 5.13 us │ [5.12 us, 5.13 us] │ 22.0G │  0.15 % │ [0.648, 0.650] │ 5.14 us │     210 ms │ 0.649 │
+│ double N=2048 hot: Stockham 8·2·8·16                            │ PASS │ 40  │ 6.08 us │ 6.10 us │ 12.8 ns │ 6.10 us │ [6.09 us, 6.10 us] │ 18.5G │  0.12 % │ [0.772, 0.773] │ 6.15 us │     250 ms │ 0.772 │
+│ double N=2048 hot: Stockham 8·4·4·16                            │ PASS │ 40  │ 6.08 us │ 6.10 us │ 9.68 ns │ 6.10 us │ [6.10 us, 6.10 us] │ 18.5G │  0.12 % │ [0.772, 0.773] │ 6.13 us │     250 ms │ 0.773 │
+│ double N=2048 hot: Stockham 8·8·2·16                            │ PASS │ 40  │ 5.44 us │ 5.46 us │ 7.46 ns │ 5.46 us │ [5.46 us, 5.46 us] │ 20.6G │  0.08 % │ [0.691, 0.692] │ 5.48 us │     224 ms │ 0.691 │
+│ double N=2048 hot: Split                                        │ PASS │ 40  │ 7.50 us │ 7.52 us │ 8.28 ns │ 7.52 us │ [7.51 us, 7.52 us] │ 15.0G │  0.06 % │ [0.951, 0.952] │ 7.54 us │     308 ms │ 0.952 │
+│ double N=2048 hot: FFT                                          │ PASS │ 40  │ 4.24 us │ 4.25 us │ 5.34 ns │ 4.25 us │ [4.25 us, 4.25 us] │ 26.5G │  0.11 % │ [0.538, 0.539] │ 4.26 us │     348 ms │ 0.539 │
+│ double N=2048 stream: SimdFFT                                   │ PASS │ 40  │  265 us │  267 us │ 1.15 us │  267 us │   [267 us, 268 us] │ 13.5G │  0.32 % │ [1.000, 1.000] │  270 us │     342 ms │ 1.000 │
+│ double N=2048 stream: Stockham 8·16·16 default                  │ PASS │ 40  │  145 us │  146 us │ 1.10 us │  147 us │   [146 us, 147 us] │ 24.5G │  0.42 % │ [0.546, 0.550] │  148 us │     375 ms │ 0.549 │
+│ double N=2048 stream: Stockham 8·16·2·8                         │ PASS │ 40  │  169 us │  171 us │ 1.26 us │  172 us │   [170 us, 172 us] │ 21.0G │  0.33 % │ [0.639, 0.643] │  173 us │     219 ms │ 0.641 │
+│ double N=2048 stream: Stockham 8·16·4·4                         │ PASS │ 40  │  168 us │  170 us │ 1.08 us │  170 us │   [169 us, 170 us] │ 21.2G │  0.52 % │ [0.633, 0.635] │  173 us │     217 ms │ 0.635 │
+│ double N=2048 stream: Stockham 8·16·8·2                         │ PASS │ 40  │  172 us │  174 us │ 1.14 us │  174 us │   [173 us, 174 us] │ 20.7G │  0.42 % │ [0.648, 0.651] │  177 us │     223 ms │ 0.649 │
+│ double N=2048 stream: Stockham 8·2·8·16                         │ PASS │ 40  │  209 us │  211 us │ 1.09 us │  211 us │   [210 us, 211 us] │ 17.1G │  0.44 % │ [0.787, 0.791] │  214 us │     270 ms │ 0.788 │
+│ double N=2048 stream: Stockham 8·4·4·16                         │ PASS │ 40  │  205 us │  207 us │  777 ns │  207 us │   [207 us, 207 us] │ 17.4G │  0.18 % │ [0.772, 0.774] │  209 us │     265 ms │ 0.773 │
+│ double N=2048 stream: Stockham 8·8·2·16                         │ PASS │ 40  │  180 us │  182 us │ 1.07 us │  182 us │   [181 us, 182 us] │ 19.8G │  0.44 % │ [0.678, 0.680] │  184 us │     232 ms │ 0.679 │
+│ double N=2048 stream: Split                                     │ PASS │ 40  │  245 us │  247 us │ 1.12 us │  247 us │   [247 us, 247 us] │ 14.6G │  0.25 % │ [0.921, 0.926] │  250 us │     316 ms │ 0.924 │
+│ double N=2048 stream: FFT                                       │ PASS │ 40  │  147 us │  149 us │  913 ns │  149 us │   [149 us, 150 us] │ 24.1G │  0.29 % │ [0.556, 0.559] │  151 us │     382 ms │ 0.558 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ double N=4096 hot: SimdFFT                                      │ PASS │ 40  │ 15.6 us │ 15.7 us │ 51.7 ns │ 15.7 us │ [15.7 us, 15.7 us] │ 15.7G │  0.13 % │ [1.000, 1.000] │ 15.9 us │     321 ms │ 1.000 │
+│ double N=4096 hot: Stockham 8·16·16·2 default                   │ PASS │ 40  │ 13.0 us │ 13.1 us │ 26.9 ns │ 13.1 us │ [13.1 us, 13.1 us] │ 18.8G │  0.08 % │ [0.833, 0.835] │ 13.2 us │     268 ms │ 0.834 │
+│ double N=4096 hot: Stockham 8·2·16·16                           │ PASS │ 40  │ 15.7 us │ 15.7 us │ 19.9 ns │ 15.7 us │ [15.7 us, 15.7 us] │ 15.6G │  0.06 % │ [1.004, 1.006] │ 15.8 us │     322 ms │ 1.005 │
+│ double N=4096 hot: Stockham 8·16·2·8·2                          │ PASS │ 40  │ 14.2 us │ 14.2 us │ 30.4 ns │ 14.2 us │ [14.2 us, 14.3 us] │ 17.3G │  0.10 % │ [0.908, 0.910] │ 14.4 us │     292 ms │ 0.909 │
+│ double N=4096 hot: Stockham 8·16·2·16                           │ PASS │ 40  │ 13.2 us │ 13.2 us │ 29.0 ns │ 13.2 us │ [13.2 us, 13.2 us] │ 18.6G │  0.09 % │ [0.843, 0.844] │ 13.3 us │     271 ms │ 0.843 │
+│ double N=4096 hot: Stockham 8·16·4·4·2                          │ PASS │ 40  │ 15.0 us │ 15.0 us │ 32.3 ns │ 15.0 us │ [15.0 us, 15.1 us] │ 16.3G │  0.15 % │ [0.959, 0.961] │ 15.1 us │     308 ms │ 0.960 │
+│ double N=4096 hot: Stockham 8·16·8·2·2                          │ PASS │ 40  │ 12.9 us │ 13.0 us │ 33.6 ns │ 13.0 us │ [12.9 us, 13.0 us] │ 19.0G │  0.13 % │ [0.826, 0.828] │ 13.0 us │     266 ms │ 0.827 │
+│ double N=4096 hot: Stockham 8·2·8·16·2                          │ PASS │ 40  │ 12.6 us │ 12.6 us │ 43.1 ns │ 12.6 us │ [12.6 us, 12.6 us] │ 19.5G │  0.17 % │ [0.805, 0.808] │ 12.8 us │     259 ms │ 0.807 │
+│ double N=4096 hot: Split                                        │ PASS │ 40  │ 18.0 us │ 18.1 us │ 53.6 ns │ 18.1 us │ [18.1 us, 18.1 us] │ 13.6G │  0.11 % │ [1.152, 1.154] │ 18.3 us │     370 ms │ 1.153 │
+│ double N=4096 hot: FFT                                          │ PASS │ 40  │ 11.9 us │ 12.0 us │ 34.4 ns │ 11.9 us │ [11.9 us, 12.0 us] │ 20.6G │  0.10 % │ [0.762, 0.764] │ 12.1 us │     245 ms │ 0.763 │
+│ double N=4096 stream: SimdFFT                                   │ PASS │ 40  │  260 us │  260 us │  242 ns │  260 us │   [260 us, 260 us] │ 15.1G │  0.05 % │ [1.000, 1.000] │  261 us │     333 ms │ 1.000 │
+│ double N=4096 stream: Stockham 8·16·16·2 default                │ PASS │ 40  │  216 us │  217 us │  333 ns │  217 us │   [217 us, 217 us] │ 18.1G │  0.08 % │ [0.832, 0.834] │  218 us │     278 ms │ 0.833 │
+│ double N=4096 stream: Stockham 8·2·16·16                        │ PASS │ 40  │  263 us │  264 us │  340 ns │  264 us │   [264 us, 264 us] │ 14.9G │  0.10 % │ [1.013, 1.015] │  265 us │     338 ms │ 1.014 │
+│ double N=4096 stream: Stockham 8·16·2·8·2                       │ PASS │ 40  │  237 us │  238 us │  263 ns │  238 us │   [237 us, 238 us] │ 16.6G │  0.07 % │ [0.912, 0.913] │  238 us │     304 ms │ 0.912 │
+│ double N=4096 stream: Stockham 8·16·2·16                        │ PASS │ 40  │  218 us │  218 us │  228 ns │  218 us │   [218 us, 218 us] │ 18.0G │  0.07 % │ [0.838, 0.839] │  219 us │     279 ms │ 0.838 │
+│ double N=4096 stream: Stockham 8·16·4·4·2                       │ PASS │ 40  │  248 us │  249 us │  412 ns │  249 us │   [249 us, 249 us] │ 15.8G │  0.11 % │ [0.954, 0.956] │  250 us │     318 ms │ 0.955 │
+│ double N=4096 stream: Stockham 8·16·8·2·2                       │ PASS │ 40  │  216 us │  217 us │  454 ns │  217 us │   [216 us, 217 us] │ 18.2G │  0.12 % │ [0.831, 0.832] │  219 us │     277 ms │ 0.832 │
+│ double N=4096 stream: Stockham 8·2·8·16·2                       │ PASS │ 40  │  210 us │  211 us │  289 ns │  211 us │   [211 us, 211 us] │ 18.6G │  0.07 % │ [0.810, 0.811] │  211 us │     270 ms │ 0.810 │
+│ double N=4096 stream: Split                                     │ PASS │ 40  │  291 us │  291 us │  374 ns │  291 us │   [291 us, 291 us] │ 13.5G │  0.08 % │ [1.118, 1.119] │  292 us │     373 ms │ 1.118 │
+│ double N=4096 stream: FFT                                       │ PASS │ 40  │  195 us │  195 us │  234 ns │  195 us │   [195 us, 195 us] │ 20.2G │  0.08 % │ [0.748, 0.749] │  196 us │     250 ms │ 0.749 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ double N=8192 hot: SimdFFT                                      │ PASS │ 40  │ 34.4 us │ 34.7 us │ 67.3 ns │ 34.7 us │ [34.7 us, 34.7 us] │ 15.3G │  0.09 % │ [1.000, 1.000] │ 34.8 us │     355 ms │ 1.000 │
+│ double N=8192 hot: Stockham 8·16·16·4 default                   │ PASS │ 40  │ 23.8 us │ 24.1 us │ 84.8 ns │ 24.1 us │ [24.1 us, 24.1 us] │ 22.1G │  0.15 % │ [0.693, 0.696] │ 24.2 us │     247 ms │ 0.694 │
+│ double N=8192 hot: Stockham 8·4·16·16                           │ PASS │ 40  │ 27.3 us │ 27.6 us │ 92.7 ns │ 27.6 us │ [27.6 us, 27.6 us] │ 19.3G │  0.16 % │ [0.794, 0.795] │ 27.8 us │     282 ms │ 0.795 │
+│ double N=8192 hot: Stockham 8·16·16·2·2                         │ PASS │ 40  │ 32.5 us │ 32.9 us │ 99.1 ns │ 32.9 us │ [32.8 us, 32.9 us] │ 16.2G │  0.09 % │ [0.947, 0.948] │ 33.0 us │     336 ms │ 0.947 │
+│ double N=8192 hot: Stockham 8·16·4·16                           │ PASS │ 40  │ 27.3 us │ 27.5 us │  134 ns │ 27.4 us │ [27.3 us, 27.5 us] │ 19.4G │  0.35 % │ [0.788, 0.794] │ 28.0 us │     281 ms │ 0.792 │
+│ double N=8192 hot: Stockham 8·16·2·8·4                          │ PASS │ 40  │ 30.2 us │ 30.4 us │ 69.6 ns │ 30.4 us │ [30.4 us, 30.4 us] │ 17.5G │  0.15 % │ [0.875, 0.877] │ 30.6 us │     311 ms │ 0.876 │
+│ double N=8192 hot: Stockham 8·16·4·4·4                          │ PASS │ 40  │ 25.0 us │ 25.3 us │ 91.6 ns │ 25.3 us │ [25.3 us, 25.4 us] │ 21.0G │  0.19 % │ [0.729, 0.731] │ 25.5 us │     259 ms │ 0.730 │
+│ double N=8192 hot: Stockham 8·16·8·2·4                          │ PASS │ 40  │ 27.1 us │ 27.4 us │  803 ns │ 27.3 us │ [27.3 us, 27.4 us] │ 19.5G │  0.22 % │ [0.786, 0.789] │ 32.4 us │     281 ms │ 0.787 │
+│ double N=8192 hot: Split                                        │ PASS │ 40  │ 37.4 us │ 37.5 us │ 53.8 ns │ 37.5 us │ [37.5 us, 37.5 us] │ 14.2G │  0.08 % │ [1.080, 1.082] │ 37.7 us │     384 ms │ 1.081 │
+│ double N=8192 hot: FFT                                          │ PASS │ 40  │ 24.5 us │ 24.8 us │  100 ns │ 24.8 us │ [24.8 us, 24.9 us] │ 21.4G │  0.23 % │ [0.715, 0.717] │ 25.0 us │     254 ms │ 0.715 │
+│ double N=8192 stream: SimdFFT                                   │ PASS │ 40  │  285 us │  286 us │  340 ns │  286 us │   [286 us, 286 us] │ 14.9G │  0.08 % │ [1.000, 1.000] │  286 us │     366 ms │ 1.000 │
+│ double N=8192 stream: Stockham 8·16·16·4 default                │ PASS │ 40  │  197 us │  198 us │  384 ns │  197 us │   [197 us, 198 us] │ 21.6G │  0.11 % │ [0.691, 0.692] │  199 us │     253 ms │ 0.691 │
+│ double N=8192 stream: Stockham 8·4·16·16                        │ PASS │ 40  │  229 us │  230 us │  427 ns │  230 us │   [230 us, 230 us] │ 18.5G │  0.11 % │ [0.804, 0.806] │  232 us │     294 ms │ 0.805 │
+│ double N=8192 stream: Stockham 8·16·16·2·2                      │ PASS │ 40  │  262 us │  262 us │  546 ns │  262 us │   [262 us, 263 us] │ 16.2G │  0.13 % │ [0.918, 0.919] │  264 us │     336 ms │ 0.919 │
+│ double N=8192 stream: Stockham 8·16·4·16                        │ PASS │ 40  │  226 us │  226 us │  381 ns │  226 us │   [226 us, 226 us] │ 18.8G │  0.11 % │ [0.792, 0.793] │  227 us │     290 ms │ 0.792 │
+│ double N=8192 stream: Stockham 8·16·2·8·4                       │ PASS │ 40  │  250 us │  251 us │  499 ns │  251 us │   [251 us, 251 us] │ 17.0G │  0.11 % │ [0.879, 0.880] │  253 us │     322 ms │ 0.879 │
+│ double N=8192 stream: Stockham 8·16·4·4·4                       │ PASS │ 40  │  212 us │  213 us │ 2.40 us │  213 us │   [213 us, 213 us] │ 20.0G │  0.10 % │ [0.744, 0.745] │  228 us │     273 ms │ 0.745 │
+│ double N=8192 stream: Stockham 8·16·8·2·4                       │ PASS │ 40  │  230 us │  231 us │  411 ns │  231 us │   [231 us, 231 us] │ 18.4G │  0.16 % │ [0.809, 0.810] │  232 us │     296 ms │ 0.809 │
+│ double N=8192 stream: Split                                     │ PASS │ 40  │  300 us │  301 us │  367 ns │  301 us │   [301 us, 301 us] │ 14.2G │  0.07 % │ [1.053, 1.055] │  302 us │     385 ms │ 1.053 │
+│ double N=8192 stream: FFT                                       │ PASS │ 40  │  203 us │  204 us │  400 ns │  204 us │   [204 us, 204 us] │ 20.9G │  0.09 % │ [0.712, 0.713] │  205 us │     261 ms │ 0.713 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ double N=16384 hot: SimdFFT                                     │ PASS │ 40  │ 73.3 us │ 73.5 us │  110 ns │ 73.5 us │ [73.4 us, 73.5 us] │ 15.6G │  0.10 % │ [1.000, 1.000] │ 73.8 us │     376 ms │ 1.000 │
+│ double N=16384 hot: Stockham 8·16·16·8 default                  │ PASS │ 40  │ 53.3 us │ 53.4 us │  118 ns │ 53.4 us │ [53.4 us, 53.4 us] │ 21.5G │  0.13 % │ [0.726, 0.728] │ 53.8 us │     274 ms │ 0.727 │
+│ double N=16384 hot: Stockham 8·8·16·16                          │ PASS │ 40  │ 59.4 us │ 59.8 us │  359 ns │ 59.7 us │ [59.6 us, 59.8 us] │ 19.2G │  0.19 % │ [0.811, 0.813] │ 61.8 us │     306 ms │ 0.812 │
+│ double N=16384 hot: Stockham 8·16·16·2·4                        │ PASS │ 40  │ 59.2 us │ 59.4 us │  103 ns │ 59.4 us │ [59.4 us, 59.5 us] │ 19.3G │  0.13 % │ [0.808, 0.810] │ 59.6 us │     304 ms │ 0.809 │
+│ double N=16384 hot: Stockham 8·16·8·16                          │ PASS │ 40  │ 62.8 us │ 63.1 us │  118 ns │ 63.0 us │ [63.0 us, 63.1 us] │ 18.2G │  0.10 % │ [0.858, 0.859] │ 63.4 us │     323 ms │ 0.858 │
+│ double N=16384 hot: Stockham 8·16·16·4·2                        │ PASS │ 40  │ 60.2 us │ 60.5 us │  121 ns │ 60.5 us │ [60.5 us, 60.6 us] │ 19.0G │  0.12 % │ [0.823, 0.825] │ 60.8 us │     310 ms │ 0.824 │
+│ double N=16384 hot: Stockham 8·16·2·8·8                         │ PASS │ 40  │ 63.8 us │ 64.1 us │  273 ns │ 64.1 us │ [64.0 us, 64.1 us] │ 17.9G │  0.14 % │ [0.871, 0.872] │ 65.7 us │     328 ms │ 0.872 │
+│ double N=16384 hot: Stockham 8·16·4·4·8                         │ PASS │ 40  │ 54.8 us │ 54.9 us │ 82.1 ns │ 54.9 us │ [54.9 us, 55.0 us] │ 20.9G │  0.12 % │ [0.747, 0.748] │ 55.1 us │     281 ms │ 0.748 │
+│ double N=16384 hot: Split                                       │ PASS │ 40  │ 75.7 us │ 75.9 us │  134 ns │ 75.9 us │ [75.8 us, 75.9 us] │ 15.1G │  0.07 % │ [1.032, 1.033] │ 76.5 us │     388 ms │ 1.032 │
+│ double N=16384 hot: FFT                                         │ PASS │ 40  │ 69.3 us │ 69.6 us │  142 ns │ 69.6 us │ [69.5 us, 69.6 us] │ 16.5G │  0.14 % │ [0.946, 0.948] │ 69.9 us │     356 ms │ 0.947 │
+│ double N=16384 stream: SimdFFT                                  │ PASS │ 40  │  301 us │  302 us │  675 ns │  302 us │   [302 us, 302 us] │ 15.2G │  0.11 % │ [1.000, 1.000] │  305 us │     387 ms │ 1.000 │
+│ double N=16384 stream: Stockham 8·16·16·8 default               │ PASS │ 40  │  216 us │  217 us │  459 ns │  217 us │   [217 us, 217 us] │ 21.2G │  0.09 % │ [0.718, 0.719] │  218 us │     278 ms │ 0.718 │
+│ double N=16384 stream: Stockham 8·8·16·16                       │ PASS │ 40  │  239 us │  241 us │  540 ns │  241 us │   [240 us, 241 us] │ 19.1G │  0.15 % │ [0.795, 0.797] │  242 us │     308 ms │ 0.796 │
+│ double N=16384 stream: Stockham 8·16·16·2·4                     │ PASS │ 40  │  238 us │  239 us │  380 ns │  239 us │   [239 us, 239 us] │ 19.2G │  0.12 % │ [0.791, 0.792] │  240 us │     306 ms │ 0.792 │
+│ double N=16384 stream: Stockham 8·16·8·16                       │ PASS │ 40  │  252 us │  253 us │  430 ns │  253 us │   [253 us, 253 us] │ 18.1G │  0.11 % │ [0.837, 0.838] │  254 us │     324 ms │ 0.837 │
+│ double N=16384 stream: Stockham 8·16·16·4·2                     │ PASS │ 40  │  244 us │  245 us │  420 ns │  245 us │   [245 us, 245 us] │ 18.7G │  0.14 % │ [0.811, 0.812] │  246 us │     314 ms │ 0.812 │
+│ double N=16384 stream: Stockham 8·16·2·8·8                      │ PASS │ 40  │  255 us │  256 us │  410 ns │  256 us │   [256 us, 256 us] │ 17.9G │  0.11 % │ [0.848, 0.850] │  257 us │     328 ms │ 0.849 │
+│ double N=16384 stream: Stockham 8·16·4·4·8                      │ PASS │ 40  │  221 us │  222 us │  388 ns │  222 us │   [222 us, 222 us] │ 20.7G │  0.12 % │ [0.733, 0.735] │  223 us │     284 ms │ 0.734 │
+│ double N=16384 stream: Split                                    │ PASS │ 40  │  305 us │  306 us │  535 ns │  306 us │   [306 us, 306 us] │ 15.0G │  0.12 % │ [1.012, 1.014] │  307 us │     392 ms │ 1.013 │
+│ double N=16384 stream: FFT                                      │ PASS │ 40  │  279 us │  280 us │  519 ns │  280 us │   [279 us, 280 us] │ 16.4G │  0.13 % │ [0.925, 0.927] │  281 us │     358 ms │ 0.926 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ double N=32768 hot: SimdFFT                                     │ PASS │ 40  │  183 us │  184 us │  394 ns │  184 us │   [184 us, 185 us] │ 13.3G │  0.16 % │ [1.000, 1.000] │  185 us │     236 ms │ 1.000 │
+│ double N=32768 hot: Stockham 8·16·16·16 default                 │ PASS │ 40  │  120 us │  120 us │  251 ns │  120 us │   [120 us, 121 us] │ 20.4G │  0.17 % │ [0.652, 0.654] │  121 us │     308 ms │ 0.653 │
+│ double N=32768 hot: Stockham 8·16·16·2·8                        │ PASS │ 40  │  146 us │  146 us │  306 ns │  146 us │   [146 us, 146 us] │ 16.8G │  0.16 % │ [0.792, 0.794] │  147 us │     374 ms │ 0.793 │
+│ double N=32768 hot: Stockham 8·16·16·4·4                        │ PASS │ 40  │  124 us │  125 us │  282 ns │  125 us │   [124 us, 125 us] │ 19.7G │  0.16 % │ [0.675, 0.677] │  125 us │     319 ms │ 0.676 │
+│ double N=32768 hot: Stockham 8·16·16·8·2                        │ PASS │ 40  │  125 us │  125 us │  391 ns │  125 us │   [125 us, 125 us] │ 19.6G │  0.26 % │ [0.678, 0.680] │  126 us │     320 ms │ 0.679 │
+│ double N=32768 hot: Stockham 8·16·2·8·16                        │ PASS │ 40  │  132 us │  133 us │  363 ns │  133 us │   [133 us, 133 us] │ 18.5G │  0.20 % │ [0.721, 0.722] │  134 us │     341 ms │ 0.722 │
+│ double N=32768 hot: Stockham 8·16·4·4·16                        │ PASS │ 40  │  130 us │  131 us │  217 ns │  131 us │   [131 us, 131 us] │ 18.8G │  0.12 % │ [0.708, 0.710] │  131 us │     335 ms │ 0.709 │
+│ double N=32768 hot: Stockham 8·16·8·2·16                        │ PASS │ 40  │  133 us │  133 us │  326 ns │  133 us │   [133 us, 133 us] │ 18.4G │  0.18 % │ [0.722, 0.724] │  134 us │     341 ms │ 0.723 │
+│ double N=32768 hot: Split                                       │ PASS │ 40  │  197 us │  198 us │  444 ns │  198 us │   [198 us, 198 us] │ 12.4G │  0.12 % │ [1.074, 1.077] │  200 us │     254 ms │ 1.076 │
+│ double N=32768 hot: FFT                                         │ PASS │ 40  │  123 us │  124 us │  303 ns │  124 us │   [124 us, 124 us] │ 19.9G │  0.15 % │ [0.670, 0.671] │  124 us │     317 ms │ 0.671 │
+│ double N=32768 stream: SimdFFT                                  │ PASS │ 40  │  367 us │  369 us │  832 ns │  369 us │   [369 us, 369 us] │ 13.3G │  0.13 % │ [1.000, 1.000] │  371 us │     236 ms │ 1.000 │
+│ double N=32768 stream: Stockham 8·16·16·16 default              │ PASS │ 40  │  240 us │  241 us │ 1.43 us │  241 us │   [241 us, 241 us] │ 20.4G │  0.12 % │ [0.653, 0.654] │  250 us │     309 ms │ 0.654 │
+│ double N=32768 stream: Stockham 8·16·16·2·8                     │ PASS │ 40  │  280 us │  282 us │ 1.02 us │  282 us │   [282 us, 282 us] │ 17.4G │  0.12 % │ [0.763, 0.765] │  287 us │     361 ms │ 0.764 │
+│ double N=32768 stream: Stockham 8·16·16·4·4                     │ PASS │ 40  │  248 us │  250 us │ 1.70 us │  249 us │   [249 us, 250 us] │ 19.7G │  0.20 % │ [0.675, 0.678] │  259 us │     320 ms │ 0.676 │
+│ double N=32768 stream: Stockham 8·16·16·8·2                     │ PASS │ 40  │  249 us │  250 us │  926 ns │  250 us │   [250 us, 250 us] │ 19.7G │  0.24 % │ [0.676, 0.679] │  252 us │     320 ms │ 0.678 │
+│ double N=32768 stream: Stockham 8·16·2·8·16                     │ PASS │ 40  │  265 us │  266 us │  643 ns │  266 us │   [266 us, 267 us] │ 18.5G │  0.14 % │ [0.721, 0.723] │  268 us │     341 ms │ 0.722 │
+│ double N=32768 stream: Stockham 8·16·4·4·16                     │ PASS │ 40  │  262 us │  263 us │  575 ns │  263 us │   [263 us, 263 us] │ 18.7G │  0.18 % │ [0.711, 0.713] │  264 us │     336 ms │ 0.713 │
+│ double N=32768 stream: Stockham 8·16·8·2·16                     │ PASS │ 40  │  265 us │  267 us │ 1.55 us │  266 us │   [266 us, 267 us] │ 18.5G │  0.21 % │ [0.721, 0.723] │  275 us │     341 ms │ 0.722 │
+│ double N=32768 stream: Split                                    │ PASS │ 40  │  395 us │  397 us │  903 ns │  397 us │   [396 us, 397 us] │ 12.4G │  0.16 % │ [1.074, 1.077] │  399 us │     254 ms │ 1.076 │
+│ double N=32768 stream: FFT                                      │ PASS │ 40  │  244 us │  246 us │ 1.50 us │  246 us │   [245 us, 246 us] │ 20.0G │  0.26 % │ [0.665, 0.668] │  254 us │     315 ms │ 0.667 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ double N=65536 hot: SimdFFT                                     │ PASS │ 40  │  411 us │  414 us │ 2.22 us │  413 us │   [413 us, 414 us] │ 12.7G │  0.21 % │ [1.000, 1.000] │  426 us │     265 ms │ 1.000 │
+│ double N=65536 hot: Stockham 8·16·16·16·2 default               │ PASS │ 40  │  325 us │  331 us │ 2.31 us │  330 us │   [330 us, 331 us] │ 15.9G │  0.29 % │ [0.798, 0.801] │  339 us │     212 ms │ 0.800 │
+│ double N=65536 hot: Stockham 8·2·16·16·16                       │ PASS │ 40  │  331 us │  334 us │ 1.63 us │  334 us │   [334 us, 335 us] │ 15.7G │  0.26 % │ [0.807, 0.810] │  341 us │     214 ms │ 0.809 │
+│ double N=65536 hot: Stockham 8·16·16·2·8·2                      │ PASS │ 40  │  333 us │  336 us │ 1.75 us │  336 us │   [335 us, 336 us] │ 15.6G │  0.24 % │ [0.809, 0.813] │  343 us │     215 ms │ 0.812 │
+│ double N=65536 hot: Stockham 8·16·2·16·16                       │ PASS │ 40  │  340 us │  342 us │ 1.91 us │  342 us │   [341 us, 342 us] │ 15.3G │  0.20 % │ [0.826, 0.828] │  349 us │     219 ms │ 0.827 │
+│ double N=65536 hot: Stockham 8·16·16·4·4·2                      │ PASS │ 40  │  353 us │  356 us │ 2.34 us │  355 us │   [355 us, 356 us] │ 14.8G │  0.21 % │ [0.858, 0.861] │  362 us │     228 ms │ 0.859 │
+│ double N=65536 hot: Stockham 8·16·16·2·16                       │ PASS │ 40  │  329 us │  332 us │ 2.40 us │  331 us │   [330 us, 333 us] │ 15.8G │  0.48 % │ [0.799, 0.802] │  338 us │     212 ms │ 0.800 │
+│ double N=65536 hot: Stockham 8·16·16·8·2·2                      │ PASS │ 40  │  405 us │  409 us │ 1.82 us │  408 us │   [408 us, 409 us] │ 12.8G │  0.17 % │ [0.985, 0.990] │  415 us │     262 ms │ 0.988 │
+│ double N=65536 hot: Split                                       │ PASS │ 40  │  491 us │  497 us │ 2.42 us │  496 us │   [496 us, 497 us] │ 10.6G │  0.23 % │ [1.198, 1.203] │  506 us │     318 ms │ 1.201 │
+│ double N=65536 hot: FFT                                         │ PASS │ 40  │  323 us │  326 us │ 1.64 us │  326 us │   [325 us, 326 us] │ 16.1G │  0.29 % │ [0.785, 0.789] │  332 us │     208 ms │ 0.787 │
+│ double N=65536 stream: SimdFFT                                  │ PASS │ 40  │  411 us │  413 us │ 1.03 us │  414 us │   [413 us, 414 us] │ 12.7G │  0.13 % │ [1.000, 1.000] │  417 us │     265 ms │ 1.000 │
+│ double N=65536 stream: Stockham 8·16·16·16·2 default            │ PASS │ 40  │  326 us │  330 us │ 1.98 us │  330 us │   [330 us, 331 us] │ 15.9G │  0.34 % │ [0.797, 0.801] │  336 us │     211 ms │ 0.799 │
+│ double N=65536 stream: Stockham 8·2·16·16·16                    │ PASS │ 40  │  332 us │  334 us │ 1.20 us │  334 us │   [333 us, 335 us] │ 15.7G │  0.23 % │ [0.806, 0.809] │  337 us │     214 ms │ 0.808 │
+│ double N=65536 stream: Stockham 8·16·16·2·8·2                   │ PASS │ 40  │  333 us │  336 us │ 1.39 us │  336 us │   [335 us, 336 us] │ 15.6G │  0.20 % │ [0.811, 0.813] │  339 us │     215 ms │ 0.812 │
+│ double N=65536 stream: Stockham 8·16·2·16·16                    │ PASS │ 40  │  340 us │  342 us │ 1.83 us │  342 us │   [341 us, 342 us] │ 15.4G │  0.27 % │ [0.825, 0.828] │  347 us │     219 ms │ 0.826 │
+│ double N=65536 stream: Stockham 8·16·16·4·4·2                   │ PASS │ 40  │  353 us │  356 us │ 2.20 us │  355 us │   [354 us, 355 us] │ 14.8G │  0.21 % │ [0.857, 0.860] │  363 us │     228 ms │ 0.859 │
+│ double N=65536 stream: Stockham 8·16·16·2·16                    │ PASS │ 40  │  328 us │  331 us │ 1.85 us │  331 us │   [330 us, 332 us] │ 15.8G │  0.21 % │ [0.799, 0.802] │  337 us │     212 ms │ 0.800 │
+│ double N=65536 stream: Stockham 8·16·16·8·2·2                   │ PASS │ 40  │  406 us │  409 us │ 1.44 us │  409 us │   [408 us, 409 us] │ 12.8G │  0.22 % │ [0.986, 0.991] │  411 us │     262 ms │ 0.988 │
+│ double N=65536 stream: Split                                    │ PASS │ 40  │  494 us │  496 us │ 1.38 us │  496 us │   [496 us, 497 us] │ 10.6G │  0.19 % │ [1.198, 1.202] │  498 us │     318 ms │ 1.200 │
+│ double N=65536 stream: FFT                                      │ PASS │ 40  │  322 us │  326 us │ 1.39 us │  326 us │   [325 us, 326 us] │ 16.1G │  0.29 % │ [0.786, 0.790] │  328 us │     208 ms │ 0.789 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ double N=131072 hot: SimdFFT                                    │ PASS │ 40  │  977 us │  983 us │ 4.33 us │  982 us │   [981 us, 983 us] │ 11.3G │  0.15 % │ [1.000, 1.000] │ 1.01 ms │     314 ms │ 1.000 │
+│ double N=131072 hot: Stockham 8·16·16·16·4 default              │ PASS │ 40  │ 2.25 ms │ 2.29 ms │ 11.5 us │ 2.29 ms │ [2.28 ms, 2.29 ms] │ 4.87G │  0.26 % │ [2.325, 2.335] │ 2.30 ms │     366 ms │ 2.330 │
+│ double N=131072 hot: Stockham 8·4·16·16·16                      │ PASS │ 40  │ 1.70 ms │ 1.74 ms │ 9.51 us │ 1.74 ms │ [1.74 ms, 1.74 ms] │ 6.40G │  0.34 % │ [1.766, 1.776] │ 1.75 ms │     278 ms │ 1.771 │
+│ double N=131072 hot: Stockham 8·16·16·16·2·2                    │ PASS │ 40  │ 1.55 ms │ 1.57 ms │ 6.30 us │ 1.57 ms │ [1.56 ms, 1.57 ms] │ 7.11G │  0.24 % │ [1.592, 1.599] │ 1.58 ms │     251 ms │ 1.594 │
+│ double N=131072 hot: Stockham 8·16·4·16·16                      │ PASS │ 40  │ 2.53 ms │ 2.55 ms │ 8.56 us │ 2.55 ms │ [2.55 ms, 2.55 ms] │ 4.37G │  0.20 % │ [2.594, 2.604] │ 2.57 ms │     204 ms │ 2.598 │
+│ double N=131072 hot: Stockham 8·16·16·2·8·4                     │ PASS │ 40  │ 2.30 ms │ 2.33 ms │ 8.18 us │ 2.33 ms │ [2.33 ms, 2.34 ms] │ 4.78G │  0.26 % │ [2.369, 2.380] │ 2.35 ms │     373 ms │ 2.374 │
+│ double N=131072 hot: Stockham 8·16·16·4·16                      │ PASS │ 40  │ 3.45 ms │ 3.49 ms │ 15.3 us │ 3.49 ms │ [3.49 ms, 3.50 ms] │ 3.19G │  0.30 % │ [3.549, 3.561] │ 3.53 ms │     279 ms │ 3.557 │
+│ double N=131072 hot: Stockham 8·16·16·4·4·4                     │ PASS │ 40  │ 2.24 ms │ 2.26 ms │ 7.96 us │ 2.26 ms │ [2.26 ms, 2.27 ms] │ 4.92G │  0.22 % │ [2.300, 2.305] │ 2.28 ms │     362 ms │ 2.304 │
+│ double N=131072 hot: Split                                      │ PASS │ 40  │ 2.01 ms │ 2.03 ms │ 9.80 us │ 2.03 ms │ [2.03 ms, 2.04 ms] │ 5.48G │  0.36 % │ [2.065, 2.076] │ 2.05 ms │     325 ms │ 2.071 │
+│ double N=131072 hot: FFT                                        │ PASS │ 40  │ 1.45 ms │ 1.47 ms │ 6.20 us │ 1.47 ms │ [1.46 ms, 1.47 ms] │ 7.60G │  0.24 % │ [1.489, 1.496] │ 1.48 ms │     235 ms │ 1.493 │
+│ double N=131072 stream: SimdFFT                                 │ PASS │ 40  │  978 us │  984 us │ 6.11 us │  983 us │   [983 us, 983 us] │ 11.3G │  0.09 % │ [1.000, 1.000] │ 1.02 ms │     315 ms │ 1.000 │
+│ double N=131072 stream: Stockham 8·16·16·16·4 default           │ PASS │ 40  │ 2.26 ms │ 2.29 ms │ 10.1 us │ 2.29 ms │ [2.29 ms, 2.29 ms] │ 4.87G │  0.20 % │ [2.327, 2.332] │ 2.32 ms │     366 ms │ 2.330 │
+│ double N=131072 stream: Stockham 8·4·16·16·16                   │ PASS │ 40  │ 1.71 ms │ 1.74 ms │ 11.8 us │ 1.74 ms │ [1.74 ms, 1.75 ms] │ 6.40G │  0.37 % │ [1.768, 1.778] │ 1.77 ms │     279 ms │ 1.770 │
+│ double N=131072 stream: Stockham 8·16·16·16·2·2                 │ PASS │ 40  │ 1.56 ms │ 1.57 ms │ 6.18 us │ 1.57 ms │ [1.57 ms, 1.57 ms] │ 7.10G │  0.21 % │ [1.593, 1.599] │ 1.58 ms │     251 ms │ 1.596 │
+│ double N=131072 stream: Stockham 8·16·4·16·16                   │ PASS │ 40  │ 2.53 ms │ 2.55 ms │ 10.9 us │ 2.56 ms │ [2.55 ms, 2.56 ms] │ 4.36G │  0.31 % │ [2.594, 2.604] │ 2.58 ms │     204 ms │ 2.599 │
+│ double N=131072 stream: Stockham 8·16·16·2·8·4                  │ PASS │ 40  │ 2.31 ms │ 2.34 ms │ 9.92 us │ 2.34 ms │ [2.33 ms, 2.34 ms] │ 4.77G │  0.24 % │ [2.371, 2.380] │ 2.37 ms │     374 ms │ 2.376 │
+│ double N=131072 stream: Stockham 8·16·16·4·16                   │ PASS │ 40  │ 3.44 ms │ 3.49 ms │ 15.9 us │ 3.50 ms │ [3.49 ms, 3.50 ms] │ 3.19G │  0.24 % │ [3.549, 3.562] │ 3.53 ms │     279 ms │ 3.556 │
+│ double N=131072 stream: Stockham 8·16·16·4·4·4                  │ PASS │ 40  │ 2.24 ms │ 2.26 ms │ 7.83 us │ 2.27 ms │ [2.26 ms, 2.27 ms] │ 4.92G │  0.19 % │ [2.303, 2.308] │ 2.29 ms │     362 ms │ 2.305 │
+│ double N=131072 stream: Split                                   │ PASS │ 40  │ 2.01 ms │ 2.04 ms │ 12.9 us │ 2.04 ms │ [2.03 ms, 2.04 ms] │ 5.47G │  0.36 % │ [2.067, 2.077] │ 2.08 ms │     326 ms │ 2.072 │
+│ double N=131072 stream: FFT                                     │ PASS │ 40  │ 1.45 ms │ 1.47 ms │ 8.15 us │ 1.47 ms │ [1.47 ms, 1.47 ms] │ 7.59G │  0.30 % │ [1.490, 1.497] │ 1.49 ms │     235 ms │ 1.493 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ double N=262144 hot: SimdFFT                                    │ PASS │ 40  │ 1.81 ms │ 1.84 ms │ 29.7 us │ 1.82 ms │ [1.82 ms, 1.83 ms] │ 12.9G │  0.40 % │ [1.000, 1.000] │ 1.91 ms │     294 ms │ 1.000 │
+│ double N=262144 hot: Stockham 8·16·16·16·8 default              │ PASS │ 40  │ 1.35 ms │ 1.39 ms │ 24.5 us │ 1.38 ms │ [1.38 ms, 1.39 ms] │ 17.1G │  0.73 % │ [0.751, 0.759] │ 1.49 ms │     222 ms │ 0.755 │
+│ double N=262144 hot: Stockham 8·8·16·16·16                      │ PASS │ 40  │ 1.43 ms │ 1.46 ms │ 27.7 us │ 1.45 ms │ [1.44 ms, 1.46 ms] │ 16.3G │  0.79 % │ [0.791, 0.797] │ 1.57 ms │     233 ms │ 0.793 │
+│ double N=262144 hot: Stockham 8·16·16·16·2·4                    │ PASS │ 40  │ 1.62 ms │ 1.64 ms │ 19.7 us │ 1.63 ms │ [1.63 ms, 1.64 ms] │ 14.5G │  0.38 % │ [0.890, 0.898] │ 1.72 ms │     262 ms │ 0.896 │
+│ double N=262144 hot: Stockham 8·16·8·16·16                      │ PASS │ 40  │ 1.40 ms │ 1.42 ms │ 23.3 us │ 1.41 ms │ [1.41 ms, 1.42 ms] │ 16.7G │  0.68 % │ [0.772, 0.777] │ 1.53 ms │     227 ms │ 0.774 │
+│ double N=262144 hot: Stockham 8·16·16·16·4·2                    │ PASS │ 40  │ 1.56 ms │ 1.58 ms │ 24.1 us │ 1.57 ms │ [1.57 ms, 1.58 ms] │ 15.0G │  0.55 % │ [0.860, 0.864] │ 1.68 ms │     254 ms │ 0.862 │
+│ double N=262144 hot: Stockham 8·16·16·8·16                      │ PASS │ 40  │ 1.79 ms │ 1.82 ms │ 16.8 us │ 1.81 ms │ [1.81 ms, 1.82 ms] │ 13.0G │  0.38 % │ [0.991, 0.997] │ 1.87 ms │     290 ms │ 0.995 │
+│ double N=262144 hot: Stockham 8·16·16·2·8·8                     │ PASS │ 40  │ 1.91 ms │ 1.97 ms │ 17.9 us │ 1.97 ms │ [1.97 ms, 1.98 ms] │ 11.9G │  0.27 % │ [1.077, 1.085] │ 2.04 ms │     316 ms │ 1.081 │
+│ double N=262144 hot: Split                                      │ PASS │ 40  │ 2.02 ms │ 2.08 ms │ 23.8 us │ 2.08 ms │ [2.07 ms, 2.08 ms] │ 11.4G │  0.32 % │ [1.133, 1.142] │ 2.16 ms │     333 ms │ 1.138 │
+│ double N=262144 hot: FFT                                        │ PASS │ 40  │ 1.36 ms │ 1.40 ms │ 22.6 us │ 1.40 ms │ [1.39 ms, 1.41 ms] │ 16.9G │  0.57 % │ [0.763, 0.768] │ 1.51 ms │     225 ms │ 0.765 │
+│ double N=262144 stream: SimdFFT                                 │ PASS │ 40  │ 1.81 ms │ 1.82 ms │ 6.63 us │ 1.82 ms │ [1.82 ms, 1.82 ms] │ 13.0G │  0.28 % │ [1.000, 1.000] │ 1.83 ms │     291 ms │ 1.000 │
+│ double N=262144 stream: Stockham 8·16·16·16·8 default           │ PASS │ 40  │ 1.33 ms │ 1.38 ms │ 12.4 us │ 1.38 ms │ [1.38 ms, 1.38 ms] │ 17.1G │  0.35 % │ [0.756, 0.760] │ 1.40 ms │     221 ms │ 0.758 │
+│ double N=262144 stream: Stockham 8·8·16·16·16                   │ PASS │ 40  │ 1.42 ms │ 1.44 ms │ 8.73 us │ 1.44 ms │ [1.44 ms, 1.45 ms] │ 16.3G │  0.39 % │ [0.791, 0.795] │ 1.47 ms │     231 ms │ 0.793 │
+│ double N=262144 stream: Stockham 8·16·16·16·2·4                 │ PASS │ 40  │ 1.61 ms │ 1.63 ms │ 9.26 us │ 1.63 ms │ [1.63 ms, 1.64 ms] │ 14.5G │  0.45 % │ [0.894, 0.897] │ 1.65 ms │     261 ms │ 0.896 │
+│ double N=262144 stream: Stockham 8·16·8·16·16                   │ PASS │ 40  │ 1.39 ms │ 1.41 ms │ 7.95 us │ 1.41 ms │ [1.41 ms, 1.42 ms] │ 16.7G │  0.35 % │ [0.774, 0.778] │ 1.43 ms │     226 ms │ 0.776 │
+│ double N=262144 stream: Stockham 8·16·16·16·4·2                 │ PASS │ 40  │ 1.55 ms │ 1.57 ms │ 8.20 us │ 1.58 ms │ [1.57 ms, 1.58 ms] │ 15.0G │  0.38 % │ [0.863, 0.866] │ 1.59 ms │     252 ms │ 0.865 │
+│ double N=262144 stream: Stockham 8·16·16·8·16                   │ PASS │ 40  │ 1.78 ms │ 1.81 ms │ 11.1 us │ 1.81 ms │ [1.81 ms, 1.82 ms] │ 13.0G │  0.33 % │ [0.991, 0.998] │ 1.83 ms │     290 ms │ 0.995 │
+│ double N=262144 stream: Stockham 8·16·16·2·8·8                  │ PASS │ 40  │ 1.90 ms │ 1.97 ms │ 14.4 us │ 1.97 ms │ [1.97 ms, 1.98 ms] │ 11.9G │  0.25 % │ [1.081, 1.087] │ 1.99 ms │     316 ms │ 1.084 │
+│ double N=262144 stream: Split                                   │ PASS │ 40  │ 2.00 ms │ 2.07 ms │ 15.6 us │ 2.07 ms │ [2.07 ms, 2.08 ms] │ 11.4G │  0.21 % │ [1.136, 1.140] │ 2.09 ms │     331 ms │ 1.139 │
+│ double N=262144 stream: FFT                                     │ PASS │ 40  │ 1.34 ms │ 1.40 ms │ 12.2 us │ 1.40 ms │ [1.39 ms, 1.40 ms] │ 16.9G │  0.47 % │ [0.765, 0.770] │ 1.41 ms │     223 ms │ 0.768 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ double N=524288 hot: SimdFFT                                    │ PASS │ 40  │ 4.12 ms │ 4.16 ms │ 16.2 us │ 4.15 ms │ [4.15 ms, 4.16 ms] │ 12.0G │  0.24 % │ [1.000, 1.000] │ 4.20 ms │     332 ms │ 1.000 │
+│ double N=524288 hot: Stockham 8·16·16·16·16 default             │ PASS │ 40  │ 3.81 ms │ 3.87 ms │ 31.4 us │ 3.87 ms │ [3.86 ms, 3.89 ms] │ 12.9G │  0.58 % │ [0.929, 0.936] │ 3.92 ms │     310 ms │ 0.934 │
+│ double N=524288 hot: Stockham 8·16·16·16·2·8                    │ PASS │ 40  │ 3.46 ms │ 3.50 ms │ 18.2 us │ 3.50 ms │ [3.49 ms, 3.51 ms] │ 14.2G │  0.31 % │ [0.840, 0.845] │ 3.55 ms │     280 ms │ 0.843 │
+│ double N=524288 hot: Stockham 8·16·16·16·4·4                    │ PASS │ 40  │ 3.08 ms │ 3.12 ms │ 21.6 us │ 3.12 ms │ [3.11 ms, 3.13 ms] │ 16.0G │  0.50 % │ [0.746, 0.752] │ 3.17 ms │     249 ms │ 0.749 │
+│ double N=524288 hot: Stockham 8·16·16·16·8·2                    │ PASS │ 40  │ 3.28 ms │ 3.34 ms │ 20.1 us │ 3.33 ms │ [3.33 ms, 3.34 ms] │ 14.9G │  0.31 % │ [0.801, 0.804] │ 3.38 ms │     267 ms │ 0.803 │
+│ double N=524288 hot: Stockham 8·16·16·2·8·16                    │ PASS │ 40  │ 3.12 ms │ 3.16 ms │ 21.5 us │ 3.17 ms │ [3.15 ms, 3.18 ms] │ 15.7G │  0.49 % │ [0.760, 0.764] │ 3.22 ms │     253 ms │ 0.762 │
+│ double N=524288 hot: Stockham 8·16·16·4·4·16                    │ PASS │ 40  │ 3.06 ms │ 3.09 ms │ 19.0 us │ 3.10 ms │ [3.09 ms, 3.10 ms] │ 16.1G │  0.45 % │ [0.743, 0.747] │ 3.13 ms │     248 ms │ 0.745 │
+│ double N=524288 hot: Stockham 8·16·16·8·2·16                    │ PASS │ 40  │ 3.06 ms │ 3.12 ms │ 19.8 us │ 3.12 ms │ [3.11 ms, 3.13 ms] │ 16.0G │  0.34 % │ [0.749, 0.752] │ 3.15 ms │     249 ms │ 0.750 │
+│ double N=524288 hot: Split                                      │ PASS │ 40  │ 4.43 ms │ 4.58 ms │ 29.1 us │ 4.58 ms │ [4.58 ms, 4.59 ms] │ 10.9G │  0.18 % │ [1.101, 1.105] │ 4.62 ms │     366 ms │ 1.102 │
+│ double N=524288 hot: FFT                                        │ PASS │ 40  │ 2.99 ms │ 3.03 ms │ 19.1 us │ 3.03 ms │ [3.01 ms, 3.04 ms] │ 16.4G │  0.51 % │ [0.726, 0.730] │ 3.07 ms │     242 ms │ 0.728 │
+│ double N=524288 stream: SimdFFT                                 │ PASS │ 40  │ 4.12 ms │ 4.16 ms │ 30.4 us │ 4.15 ms │ [4.14 ms, 4.17 ms] │ 12.0G │  0.35 % │ [1.000, 1.000] │ 4.31 ms │     333 ms │ 1.000 │
+│ double N=524288 stream: Stockham 8·16·16·16·16 default          │ PASS │ 40  │ 3.82 ms │ 3.89 ms │ 42.9 us │ 3.88 ms │ [3.87 ms, 3.90 ms] │ 12.8G │  0.71 % │ [0.930, 0.937] │ 4.03 ms │     311 ms │ 0.934 │
+│ double N=524288 stream: Stockham 8·16·16·16·2·8                 │ PASS │ 40  │ 3.48 ms │ 3.51 ms │ 22.0 us │ 3.50 ms │ [3.49 ms, 3.52 ms] │ 14.2G │  0.42 % │ [0.841, 0.846] │ 3.57 ms │     281 ms │ 0.843 │
+│ double N=524288 stream: Stockham 8·16·16·16·4·4                 │ PASS │ 40  │ 3.07 ms │ 3.12 ms │ 27.5 us │ 3.12 ms │ [3.11 ms, 3.13 ms] │ 16.0G │  0.45 % │ [0.749, 0.754] │ 3.22 ms │     250 ms │ 0.751 │
+│ double N=524288 stream: Stockham 8·16·16·16·8·2                 │ PASS │ 40  │ 3.30 ms │ 3.34 ms │ 22.9 us │ 3.34 ms │ [3.33 ms, 3.35 ms] │ 14.9G │  0.47 % │ [0.801, 0.805] │ 3.42 ms │     267 ms │ 0.803 │
+│ double N=524288 stream: Stockham 8·16·16·2·8·16                 │ PASS │ 40  │ 3.13 ms │ 3.17 ms │ 18.4 us │ 3.17 ms │ [3.16 ms, 3.17 ms] │ 15.7G │  0.36 % │ [0.759, 0.763] │ 3.22 ms │     253 ms │ 0.762 │
+│ double N=524288 stream: Stockham 8·16·16·4·4·16                 │ PASS │ 40  │ 3.07 ms │ 3.10 ms │ 22.1 us │ 3.10 ms │ [3.09 ms, 3.11 ms] │ 16.1G │  0.49 % │ [0.743, 0.748] │ 3.18 ms │     248 ms │ 0.746 │
+│ double N=524288 stream: Stockham 8·16·16·8·2·16                 │ PASS │ 40  │ 3.07 ms │ 3.12 ms │ 22.4 us │ 3.12 ms │ [3.11 ms, 3.13 ms] │ 16.0G │  0.35 % │ [0.749, 0.752] │ 3.20 ms │     250 ms │ 0.751 │
+│ double N=524288 stream: Split                                   │ PASS │ 40  │ 4.45 ms │ 4.58 ms │ 29.2 us │ 4.58 ms │ [4.58 ms, 4.59 ms] │ 10.9G │  0.17 % │ [1.099, 1.107] │ 4.66 ms │     367 ms │ 1.105 │
+│ double N=524288 stream: FFT                                     │ PASS │ 40  │ 2.99 ms │ 3.03 ms │ 20.8 us │ 3.03 ms │ [3.02 ms, 3.04 ms] │ 16.5G │  0.46 % │ [0.726, 0.731] │ 3.08 ms │     242 ms │ 0.729 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ double N=1048576 hot: SimdFFT                                   │ PASS │ 40  │ 10.3 ms │ 10.4 ms │ 71.6 us │ 10.4 ms │ [10.4 ms, 10.4 ms] │ 10.1G │  0.40 % │ [1.000, 1.000] │ 10.6 ms │     416 ms │ 1.000 │
+│ double N=1048576 hot: Stockham 8·16·16·16·16·2 default          │ PASS │ 40  │ 7.64 ms │ 7.77 ms │ 99.0 us │ 7.75 ms │ [7.73 ms, 7.76 ms] │ 13.5G │  0.28 % │ [0.743, 0.748] │ 8.15 ms │     311 ms │ 0.744 │
+│ double N=1048576 hot: Stockham 8·2·16·16·16·16                  │ PASS │ 40  │ 7.58 ms │ 7.79 ms │  172 us │ 7.75 ms │ [7.72 ms, 7.78 ms] │ 13.5G │  0.65 % │ [0.737, 0.750] │ 8.23 ms │     312 ms │ 0.743 │
+│ double N=1048576 hot: Stockham 8·16·16·16·2·8·2                 │ PASS │ 40  │ 7.86 ms │ 7.93 ms │ 58.9 us │ 7.92 ms │ [7.90 ms, 7.93 ms] │ 13.2G │  0.31 % │ [0.759, 0.763] │ 8.21 ms │     317 ms │ 0.760 │
+│ double N=1048576 hot: Stockham 8·16·2·16·16·16                  │ PASS │ 40  │ 7.51 ms │ 7.61 ms │  115 us │ 7.57 ms │ [7.55 ms, 7.59 ms] │ 13.9G │  0.33 % │ [0.726, 0.732] │ 7.97 ms │     304 ms │ 0.728 │
+│ double N=1048576 hot: Stockham 8·16·16·16·4·4·2                 │ PASS │ 40  │ 7.99 ms │ 8.14 ms │ 78.4 us │ 8.14 ms │ [8.11 ms, 8.17 ms] │ 12.9G │  0.70 % │ [0.779, 0.787] │ 8.32 ms │     326 ms │ 0.782 │
+│ double N=1048576 hot: Stockham 8·16·16·2·16·16                  │ PASS │ 40  │ 7.73 ms │ 7.82 ms │ 53.7 us │ 7.83 ms │ [7.81 ms, 7.84 ms] │ 13.4G │  0.40 % │ [0.748, 0.754] │ 8.00 ms │     313 ms │ 0.751 │
+│ double N=1048576 hot: Stockham 8·16·16·16·8·2·2                 │ PASS │ 40  │ 7.91 ms │ 8.06 ms │ 94.7 us │ 8.03 ms │ [8.01 ms, 8.08 ms] │ 13.1G │  0.67 % │ [0.770, 0.778] │ 8.26 ms │     322 ms │ 0.773 │
+│ double N=1048576 hot: Split                                     │ PASS │ 40  │ 10.7 ms │ 10.9 ms │  117 us │ 10.9 ms │ [10.9 ms, 10.9 ms] │ 9.61G │  0.25 % │ [1.045, 1.053] │ 11.4 ms │     438 ms │ 1.050 │
+│ double N=1048576 hot: FFT                                       │ PASS │ 40  │ 7.64 ms │ 7.79 ms │  162 us │ 7.73 ms │ [7.71 ms, 7.75 ms] │ 13.6G │  0.46 % │ [0.740, 0.747] │ 8.23 ms │     311 ms │ 0.744 │
+│ double N=1048576 stream: SimdFFT                                │ PASS │ 40  │ 10.3 ms │ 10.4 ms │ 79.9 us │ 10.4 ms │ [10.4 ms, 10.5 ms] │ 10.1G │  0.50 % │ [1.000, 1.000] │ 10.6 ms │     417 ms │ 1.000 │
+│ double N=1048576 stream: Stockham 8·16·16·16·16·2 default       │ PASS │ 40  │ 7.65 ms │ 7.78 ms │ 95.8 us │ 7.76 ms │ [7.72 ms, 7.78 ms] │ 13.5G │  0.54 % │ [0.743, 0.748] │ 8.09 ms │     311 ms │ 0.746 │
+│ double N=1048576 stream: Stockham 8·2·16·16·16·16               │ PASS │ 40  │ 7.64 ms │ 7.79 ms │  166 us │ 7.73 ms │ [7.70 ms, 7.76 ms] │ 13.6G │  0.58 % │ [0.739, 0.745] │ 8.24 ms │     312 ms │ 0.744 │
+│ double N=1048576 stream: Stockham 8·16·16·16·2·8·2              │ PASS │ 40  │ 7.84 ms │ 7.96 ms │ 98.5 us │ 7.94 ms │ [7.91 ms, 7.96 ms] │ 13.2G │  0.51 % │ [0.759, 0.763] │ 8.41 ms │     318 ms │ 0.762 │
+│ double N=1048576 stream: Stockham 8·16·2·16·16·16               │ PASS │ 40  │ 7.49 ms │ 7.63 ms │  115 us │ 7.59 ms │ [7.57 ms, 7.61 ms] │ 13.8G │  0.45 % │ [0.725, 0.734] │ 7.92 ms │     305 ms │ 0.728 │
+│ double N=1048576 stream: Stockham 8·16·16·16·4·4·2              │ PASS │ 40  │ 7.92 ms │ 8.12 ms │  102 us │ 8.10 ms │ [8.07 ms, 8.17 ms] │ 12.9G │  0.90 % │ [0.774, 0.783] │ 8.32 ms │     325 ms │ 0.777 │
+│ double N=1048576 stream: Stockham 8·16·16·2·16·16               │ PASS │ 40  │ 7.75 ms │ 7.82 ms │ 40.1 us │ 7.82 ms │ [7.80 ms, 7.83 ms] │ 13.4G │  0.35 % │ [0.746, 0.752] │ 7.92 ms │     313 ms │ 0.750 │
+│ double N=1048576 stream: Stockham 8·16·16·16·8·2·2              │ PASS │ 40  │ 7.82 ms │ 8.06 ms │  122 us │ 8.02 ms │ [8.00 ms, 8.09 ms] │ 13.1G │  0.87 % │ [0.769, 0.776] │ 8.30 ms │     322 ms │ 0.773 │
+│ double N=1048576 stream: Split                                  │ PASS │ 40  │ 10.7 ms │ 10.9 ms │  101 us │ 10.9 ms │ [10.9 ms, 10.9 ms] │ 9.61G │  0.30 % │ [1.045, 1.052] │ 11.3 ms │     437 ms │ 1.049 │
+│ double N=1048576 stream: FFT                                    │ PASS │ 40  │ 7.63 ms │ 7.80 ms │  160 us │ 7.75 ms │ [7.72 ms, 7.78 ms] │ 13.5G │  0.61 % │ [0.741, 0.749] │ 8.24 ms │     312 ms │ 0.745 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ double N=1000 hot: FFT                                          │ PASS │ 40  │ 19.8 us │ 19.8 us │ 37.2 ns │ 19.8 us │ [19.8 us, 19.8 us] │ 2.52G │  0.06 % │ [1.000, 1.000] │ 20.0 us │     203 ms │ 1.000 │
+│ double N=1000 stream: FFT                                       │ PASS │ 40  │ 1.30 ms │ 1.30 ms │ 1.69 us │ 1.30 ms │ [1.30 ms, 1.30 ms] │ 2.49G │  0.06 % │ [1.000, 1.000] │ 1.31 ms │     209 ms │ 1.000 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+│ double N=1009 hot: FFT                                          │ PASS │ 40  │ 20.0 us │ 20.0 us │ 17.2 ns │ 20.0 us │ [20.0 us, 20.1 us] │ 2.51G │  0.05 % │ [1.000, 1.000] │ 20.1 us │     205 ms │ 1.000 │
+│ double N=1009 stream: FFT                                       │ PASS │ 40  │ 1.29 ms │ 1.30 ms │ 1.76 us │ 1.30 ms │ [1.30 ms, 1.30 ms] │ 2.49G │  0.08 % │ [1.000, 1.000] │ 1.30 ms │     207 ms │ 1.000 │
+├─────────────────────────────────────────────────────────────────┼──────┼─────┼─────────┼─────────┼─────────┼─────────┼────────────────────┼───────┼─────────┼────────────────┼─────────┼────────────┼───────┤
+└─────────────────────────────────────────────────────────────────┴──────┴─────┴─────────┴─────────┴─────────┴─────────┴────────────────────┴───────┴─────────┴────────────────┴─────────┴────────────┴───────┘
